@@ -7,13 +7,24 @@
     "apps/*"
   ],
   "scripts": {
+    "studio": "tsx apps/server/src/cli.ts serve",
+    "studio:dev": "tsx apps/server/src/cli.ts serve --allow-origin http://127.0.0.1:5173",
+    "mcp": "tsx apps/server/src/cli.ts mcp",
+    "dev": "npm run dev -w @fullscale/editor",
+    "build": "npm run build -w @fullscale/editor",
     "test": "vitest run",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "test:blender": "cd blender && python3 -m unittest discover -s tests -t .",
+    "test:ios": "cd apps/capture-ios/CaptureKit && swift test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check",
+    "format": "biome format --write",
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:blender"
   },
   "engines": {
     "node": ">=22.12"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.6.3",
     "@types/node": "^22.20.5",
     "@types/three": "^0.186.0",
     "three": "^0.186.1",
