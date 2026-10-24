@@ -1,0 +1,15 @@
+schema_version = "1.0.0"
+
+id = "fullscale"
+version = "0.1.0"
+name = "Fullscale"
+tagline = "Live link to the Fullscale studio: your home at real size"
+maintainer = "Fullscale contributors"
+type = "add-on"
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+tags = ["Import-Export", "Scene"]
+
+[permissions]
+network = "Connects to the Fullscale studio running on this computer"
+files = "Reads the studio's run folder for its address and token, and its 3D file"
