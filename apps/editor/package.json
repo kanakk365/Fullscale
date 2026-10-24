@@ -1,0 +1,29 @@
+{
+  "name": "@fullscale/editor",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "The editor: a 2D plan and a 3D view of the home, edited live with the studio",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@fullscale/core": "*",
+    "@fullscale/protocol": "*",
+    "@fullscale/three": "*",
+    "@react-three/fiber": "^9.8.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@fullscale/server": "*",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "playwright-core": "^1.64.1",
+    "vite": "^8.3.5"
+  }
+}
