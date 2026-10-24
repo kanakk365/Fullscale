@@ -174,6 +174,8 @@ export function buildOpeningFill(wall: Wall, o: Opening, mats: { frame: THREE.Ma
     const leafH = o.height - frameT;
     const hingeSign = o.hinge === 'end' ? 1 : -1;
     const pivot = new THREE.Group();
+    // Named and marked so other programs (Blender, viewers) can find the hinge and swing it.
+    pivot.name = `${o.id}:hinge`;
     pivot.position.set(hingeSign * (leafW / 2), -frameT / 2, 0);
     const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafW, leafH, 0.04), mats.door);
     leaf.position.set(-hingeSign * (leafW / 2), 0, 0);
@@ -181,6 +183,7 @@ export function buildOpeningFill(wall: Wall, o: Opening, mats: { frame: THREE.Ma
     // Local +z is the wall's right side.
     const swingSign = o.swing === 'right' ? 1 : -1;
     pivot.rotation.y = hingeSign * swingSign * -0.35;
+    pivot.userData = { hinge: { axis: 'y', openRadians: pivot.rotation.y } };
     g.add(pivot);
   }
   return g;

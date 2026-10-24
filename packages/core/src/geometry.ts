@@ -1,5 +1,5 @@
 // Plan geometry on the floor plane. Points are [x, z] in metres.
-import type { Home, Item, Opening, Vec2, Vec3, Wall } from './schema.ts';
+import type { Item, Opening, Vec2, Vec3, Wall } from './schema.ts';
 
 export const EPS = 1e-6;
 
@@ -50,12 +50,7 @@ export function faceOffsets(w: Pick<Wall, 'thickness' | 'line'>): { left: number
 export function wallFootprint(w: Pick<Wall, 'start' | 'end' | 'thickness' | 'line'>): Vec2[] {
   const n = leftOf(wallDirection(w));
   const o = faceOffsets(w);
-  return [
-    add(w.start, scale(n, o.left)),
-    add(w.end, scale(n, o.left)),
-    add(w.end, scale(n, o.right)),
-    add(w.start, scale(n, o.right)),
-  ];
+  return [add(w.start, scale(n, o.left)), add(w.end, scale(n, o.left)), add(w.end, scale(n, o.right)), add(w.start, scale(n, o.right))];
 }
 
 /** Point on the wall's reference line at a distance along it. */
@@ -195,13 +190,7 @@ export function polygonDistance(a: Vec2[], b: Vec2[]): number {
       const b1 = b[j]!;
       const b2 = b[(j + 1) % b.length]!;
       if (segmentsIntersect(a1, a2, b1, b2)) return 0;
-      best = Math.min(
-        best,
-        pointSegmentDistance(a1, b1, b2),
-        pointSegmentDistance(a2, b1, b2),
-        pointSegmentDistance(b1, a1, a2),
-        pointSegmentDistance(b2, a1, a2),
-      );
+      best = Math.min(best, pointSegmentDistance(a1, b1, b2), pointSegmentDistance(a2, b1, b2), pointSegmentDistance(b1, a1, a2), pointSegmentDistance(b2, a1, a2));
     }
   }
   return best;
@@ -231,12 +220,7 @@ export function itemFootprint(item: Pick<Item, 'position' | 'rotation' | 'size'>
   const c: Vec2 = [item.position[0], item.position[2]];
   const hx = scale(ux, w / 2);
   const hz = scale(uz, d / 2);
-  return [
-    add(add(c, scale(hx, -1)), scale(hz, -1)),
-    add(add(c, hx), scale(hz, -1)),
-    add(add(c, hx), hz),
-    add(add(c, scale(hx, -1)), hz),
-  ];
+  return [add(add(c, scale(hx, -1)), scale(hz, -1)), add(add(c, hx), scale(hz, -1)), add(add(c, hx), hz), add(add(c, scale(hx, -1)), hz)];
 }
 
 /** How far two boxes differ in shape, ignoring scale: 0 = same proportions, 0.05 = 5%. */

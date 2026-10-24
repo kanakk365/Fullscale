@@ -4,9 +4,12 @@ import {
   addOpening,
   addRectangularRoom,
   addWall,
+  applyPatch,
   createHome,
+  deepEqual,
   diffHomes,
   History,
+  invertPatch,
   paint,
   remove,
   updateItem,
@@ -146,5 +149,14 @@ describe('per-actor undo', () => {
     expect(s.home.walls[0]!.height).toBeUndefined();
     expect(s.undo('person').ok).toBe(true);
     expect(s.home.walls[0]!.height).toBe(2.4);
+  });
+});
+
+describe('inverted patches', () => {
+  it('turn a home back when played forwards', () => {
+    const start = addRectangularRoom(createHome({ name: 't' }), { name: 'R', x: 0, z: 0, width: 3, depth: 3 }).home;
+    const r = paint(start, { target: { room: 'room-1', surface: 'walls' }, color: '#123456' });
+    const back = applyPatch(r.home, invertPatch(r.patch), 'redo');
+    expect(deepEqual({ ...back, updatedAt: '' }, { ...start, updatedAt: '', nextIds: back.nextIds })).toBe(true);
   });
 });

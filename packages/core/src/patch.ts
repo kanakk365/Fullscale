@@ -164,13 +164,9 @@ function stepsFor(patch: Patch, direction: Direction): Step[] {
     const inserts = (entry.op === 'create') === (direction === 'redo');
     return { kind: inserts ? 'insert' : 'remove', entry };
   });
-  const inserts = steps
-    .filter((s): s is Extract<Step, { kind: 'insert' }> => s.kind === 'insert')
-    .sort((a, b) => rank(a.entry.collection) - rank(b.entry.collection) || a.entry.index - b.entry.index);
+  const inserts = steps.filter((s): s is Extract<Step, { kind: 'insert' }> => s.kind === 'insert').sort((a, b) => rank(a.entry.collection) - rank(b.entry.collection) || a.entry.index - b.entry.index);
   const fields = steps.filter((s) => s.kind === 'fields');
-  const removes = steps
-    .filter((s): s is Extract<Step, { kind: 'remove' }> => s.kind === 'remove')
-    .sort((a, b) => rank(b.entry.collection) - rank(a.entry.collection));
+  const removes = steps.filter((s): s is Extract<Step, { kind: 'remove' }> => s.kind === 'remove').sort((a, b) => rank(b.entry.collection) - rank(a.entry.collection));
   return [...inserts, ...fields, ...removes];
 }
 
@@ -303,4 +299,17 @@ export function mergeUpdates(first: Patch, second: Patch): Patch {
 
 export function onlyUpdates(patch: Patch): boolean {
   return patch.entries.every((e) => e.op === 'update');
+}
+
+/** The patch that undoes this one, so an undo can be sent to others as a normal change. */
+export function invertPatch(patch: Patch): Patch {
+  return {
+    entries: [...patch.entries].reverse().map((e): PatchEntry => {
+      if (e.op === 'create') return { ...e, op: 'delete' };
+      if (e.op === 'delete') return { ...e, op: 'create' };
+      const fields: Record<string, FieldChange> = {};
+      for (const [k, ch] of Object.entries(e.fields)) fields[k] = change(ch.after, ch.before);
+      return { ...e, fields };
+    }),
+  };
 }

@@ -7,7 +7,8 @@ export type Kind = 'level' | 'wall' | 'opening' | 'room' | 'item' | 'material' |
 export type Collection = 'levels' | 'walls' | 'openings' | 'rooms' | 'items' | 'materials' | 'captures';
 
 export interface Reference {
-  /** field holding the referenced id; "materials.*" means every value of that record */
+  /** field holding the referenced id; "materials.*" means every value of that record,
+   *  "plan.level" a field of an object field */
   path: string;
   target: Kind;
   /** cascade: deleting the target deletes this element too; refuse: the delete is refused */
@@ -68,7 +69,16 @@ export const KINDS: Readonly<Record<Kind, KindInfo>> = {
     nested: ['materials', 'sources'],
   }),
   material: kind({ kind: 'material', collection: 'materials', refs: [], dimensions: [], nested: [] }),
-  capture: kind({ kind: 'capture', collection: 'captures', refs: [], dimensions: [], nested: [] }),
+  capture: kind({
+    kind: 'capture',
+    collection: 'captures',
+    refs: [
+      { path: 'plan.level', target: 'level', onDelete: 'cascade' },
+      { path: 'toHome.level', target: 'level', onDelete: 'cascade' },
+    ],
+    dimensions: [],
+    nested: [],
+  }),
 };
 
 export const KIND_LIST: readonly KindInfo[] = Object.values(KINDS);
@@ -114,10 +124,10 @@ export function allIds(home: Home): Set<string> {
 export function referencedIds(element: Element, ref: Reference): string[] {
   const [field, sub] = ref.path.split('.');
   const value = element[field!];
-  if (sub === '*') {
-    return value && typeof value === 'object' ? Object.values(value as Record<string, unknown>).filter((v): v is string => typeof v === 'string') : [];
-  }
-  return typeof value === 'string' ? [value] : [];
+  const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+  if (sub === '*') return isRecord(value) ? Object.values(value).filter((v): v is string => typeof v === 'string') : [];
+  const target = sub === undefined ? value : isRecord(value) ? value[sub] : undefined;
+  return typeof target === 'string' ? [target] : [];
 }
 
 export interface Dependent {

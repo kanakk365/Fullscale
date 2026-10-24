@@ -20,7 +20,19 @@ export type ErrorCode =
   | 'nothing_to_paint'
   | 'bad_model'
   | 'home_wipe_blocked'
-  | 'bad_length';
+  | 'bad_length'
+  | 'wall_exists'
+  | 'opening_in_the_way'
+  | 'nothing_to_join'
+  | 'cannot_merge'
+  | 'stale_revision'
+  | 'scale_unknown'
+  | 'scale_inconsistent'
+  | 'does_not_fit'
+  | 'nothing_to_undo'
+  | 'undo_conflict'
+  | 'blender_unavailable'
+  | 'render_failed';
 
 export class EditError extends Error {
   readonly code: ErrorCode;

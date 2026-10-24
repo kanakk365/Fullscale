@@ -98,7 +98,7 @@ export function formatLength(metres: number, opts: { unit?: 'm' | 'cm' | 'mm' | 
   const unit = opts.unit ?? 'm';
   let text: string;
   if (unit === 'ft-in') {
-    const eighths = Math.round(Math.abs(metres) / TO_METRES.in * 8);
+    const eighths = Math.round((Math.abs(metres) / TO_METRES.in) * 8);
     const feet = Math.floor(eighths / 96);
     const rest = eighths - feet * 96;
     const inches = Math.floor(rest / 8);
@@ -118,7 +118,12 @@ export function formatLength(metres: number, opts: { unit?: 'm' | 'cm' | 'mm' | 
     text = `${Math.round(metres * 1000)} mm`;
   }
   if (opts.uncertainty === undefined) return text;
-  const u = opts.uncertainty;
-  const plusMinus = u >= 0.01 ? `±${Math.round(u * 100)} cm` : `±${Math.max(1, Math.round(u * 1000))} mm`;
-  return `${text} ${plusMinus}`;
+  return `${text} ${formatUncertainty(opts.uncertainty)}`;
+}
+
+/** Write a ± for people, to one significant figure as uncertainties usually are:
+ *  "±4 mm", "±1 cm", "±10 cm". */
+export function formatUncertainty(metres: number): string {
+  const mm = Math.max(1, Number((metres * 1000).toPrecision(1)));
+  return mm < 10 ? `±${mm} mm` : `±${mm / 10} cm`;
 }

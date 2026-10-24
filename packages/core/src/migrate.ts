@@ -7,18 +7,7 @@
 import type { z } from 'zod';
 import { EditError } from './errors.ts';
 import { counterFloor } from './ids.ts';
-import {
-  CaptureRefSchema,
-  FORMAT,
-  HomeSchema,
-  ItemSchema,
-  LevelSchema,
-  MaterialSchema,
-  OpeningSchema,
-  RoomSchema,
-  WallSchema,
-  type Home,
-} from './schema.ts';
+import { CaptureRefSchema, FORMAT, HomeSchema, ItemSchema, LevelSchema, MaterialSchema, OpeningSchema, RoomSchema, WallSchema, type Home } from './schema.ts';
 
 type Raw = Record<string, unknown>;
 

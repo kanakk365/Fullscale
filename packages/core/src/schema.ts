@@ -81,9 +81,7 @@ export const WallSchema = z.object({
    *  use "left" or "right" and stay exact even if the thickness is a guess. */
   line: z.enum(['center', 'left', 'right']).default('center'),
   /** material ids for each face; left/right are as seen walking from start to end */
-  materials: z
-    .object({ left: IdSchema.optional(), right: IdSchema.optional() })
-    .default({}),
+  materials: z.object({ left: IdSchema.optional(), right: IdSchema.optional() }).default({}),
   source: SourceSchema.optional(),
   sources: FieldSourcesSchema.optional(),
 });
@@ -122,13 +120,12 @@ export const RoomSchema = z.object({
   sources: FieldSourcesSchema.optional(),
 });
 
-// A path inside the local models folder: "/"-separated parts that never start with "."
-// (so no "..", no hidden files, no absolute paths), ending in .glb or .gltf.
-const modelPart = String.raw`[\p{L}\p{N}_ ()+,-][\p{L}\p{N}_ ()+,.-]*`;
-export const ModelFileSchema = z
-  .string()
-  .max(200)
-  .regex(new RegExp(`^${modelPart}(?:/${modelPart})*\\.(?:glb|gltf)$`, 'iu'), 'model files are .glb or .gltf paths inside the models folder');
+// Paths to local files are "/"-separated parts that never start with "." (so no "..", no
+// hidden files and no absolute paths).
+const pathPart = String.raw`[\p{L}\p{N}_ ()+,-][\p{L}\p{N}_ ()+,.-]*`;
+const safePath = (ending: string) => new RegExp(`^${pathPart}(?:/${pathPart})*${ending}$`, 'iu');
+
+export const ModelFileSchema = z.string().max(200).regex(safePath(String.raw`\.(?:glb|gltf)`), 'model files are .glb or .gltf paths inside the models folder');
 
 /** A 3D model file the user supplied. The files live in the local models folder
  *  (data/models/ by default), which git ignores; the home only stores the path. */
@@ -168,13 +165,58 @@ export const ItemSchema = z.object({
   sources: FieldSourcesSchema.optional(),
 });
 
+/** A known length on a plan picture, used to find its scale. */
+export const KnownLengthSchema = z.object({
+  /** two points on the picture, in pixels */
+  a: Vec2Schema,
+  b: Vec2Schema,
+  metres: positive(),
+  /** ± metres on the known length itself */
+  uncertainty: z.number().finite().nonnegative().optional(),
+});
+
+/** A floor plan picture laid under a level, to trace or check against. */
+export const PlanPictureSchema = z.object({
+  level: IdSchema,
+  /** the picture's size in pixels */
+  pixels: z.tuple([positive(), positive()]),
+  /** page of a multi-page file */
+  page: z.number().int().positive().optional(),
+  /** where the picture's top-left corner lies on the plan */
+  origin: Vec2Schema.default([0, 0]),
+  /** degrees counter-clockwise seen from above */
+  rotation: finite().default(0),
+  /** absent until the picture is scaled from known lengths */
+  metresPerPixel: positive().optional(),
+  scale: z
+    .object({
+      known: z.array(KnownLengthSchema).min(1).max(20),
+      /** relative uncertainty of the scale, e.g. 0.004 = 0.4% */
+      uncertainty: z.number().finite().nonnegative(),
+      /** how much the known lengths disagree, metres (root-mean-square) */
+      residual: z.number().finite().nonnegative(),
+    })
+    .optional(),
+  opacity: z.number().min(0).max(1).default(0.5),
+  locked: z.boolean().default(false),
+});
+
+/** Picture and capture files sit next to the home file. */
+export const CapturePathSchema = z.string().max(300).regex(safePath(''), 'capture paths are relative, with no ".." or hidden parts');
+
 export const CaptureRefSchema = z.object({
   id: IdSchema,
   kind: z.enum(['phone-capture', 'floor-plan-image', 'other']),
   /** path relative to the home file, never committed for real homes */
-  path: z.string().max(300),
+  path: CapturePathSchema,
   importedAt: z.string(),
   note: z.string().max(500).optional(),
+  /** how a floor plan picture lies under its level */
+  plan: PlanPictureSchema.optional(),
+  /** how a phone capture's world was turned and moved onto the plan: rotate by `yaw` degrees
+   *  (counter-clockwise seen from above), then shift by `offset`; `floorY` is the capture's
+   *  floor height. Photos and the mesh use it to line up with the home. */
+  toHome: z.object({ yaw: finite(), offset: Vec2Schema, floorY: finite(), level: IdSchema }).optional(),
 });
 
 /** An element that failed to load. It is kept as it was, reported, and saved back
@@ -219,6 +261,8 @@ export type ModelRef = z.infer<typeof ModelRefSchema>;
 export type ModelRefInput = z.input<typeof ModelRefSchema>;
 export type Item = z.infer<typeof ItemSchema>;
 export type CaptureRef = z.infer<typeof CaptureRefSchema>;
+export type PlanPicture = z.infer<typeof PlanPictureSchema>;
+export type KnownLength = z.infer<typeof KnownLengthSchema>;
 export type Home = z.infer<typeof HomeSchema>;
 
 /** Parse a current-format home and fill defaults. Throws a readable error if it is
@@ -226,9 +270,7 @@ export type Home = z.infer<typeof HomeSchema>;
 export function parseHome(input: unknown): Home {
   const result = HomeSchema.safeParse(input);
   if (!result.success) {
-    const lines = result.error.issues
-      .slice(0, 20)
-      .map((i) => `- ${i.path.join('.') || '(root)'}: ${i.message}`);
+    const lines = result.error.issues.slice(0, 20).map((i) => `- ${i.path.join('.') || '(root)'}: ${i.message}`);
     throw new Error(`Not a valid home document:\n${lines.join('\n')}`);
   }
   return result.data;

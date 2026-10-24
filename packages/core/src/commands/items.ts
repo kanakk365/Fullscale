@@ -18,7 +18,9 @@ function toVec3(position: [number, number] | [number, number, number], keepY = 0
 function catalogFor(id: string) {
   const entry = CATALOG_BY_ID.get(id);
   if (!entry) {
-    const some = CATALOG.slice(0, 8).map((c) => c.id).join(', ');
+    const some = CATALOG.slice(0, 8)
+      .map((c) => c.id)
+      .join(', ');
     throw new EditError('not_found', `No catalogue entry "${id}". Try one of: ${some}, … (or "box" for a plain box at any size).`, { id, kind: 'catalog' });
   }
   return entry;

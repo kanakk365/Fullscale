@@ -1,0 +1,15 @@
+{
+  "name": "@fullscale/protocol",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Messages between the studio server and its live clients: the editor and the Blender add-on",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fullscale/core": "*",
+    "zod": "^4.6.7"
+  }
+}

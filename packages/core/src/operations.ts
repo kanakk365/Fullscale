@@ -3,20 +3,31 @@
 // all-or-nothing and is one undo step.
 import { z } from 'zod';
 import {
+  addCapture,
   addItem,
   addLevel,
   addOpening,
+  addPlanPicture,
   addRectangularRoom,
   addRoom,
   addWall,
   BY_USER,
   clearHome,
+  detectRooms,
+  drawRoom,
+  drawWall,
   edit,
+  joinWallEnd,
+  mergeWalls,
+  moveWall,
   moveWallEnd,
   paint,
+  placePlanPicture,
   remove,
   renameHome,
+  scalePlanPicture,
   setWallLength,
+  splitWall,
   updateItem,
   updateLevel,
   updateOpening,
@@ -36,20 +47,31 @@ export const COMMANDS = {
   addLevel,
   updateLevel,
   addWall,
+  drawWall,
   updateWall,
+  moveWall,
   moveWallEnd,
   setWallLength,
+  splitWall,
+  mergeWalls,
+  joinWallEnd,
   addOpening,
   updateOpening,
   addRoom,
   updateRoom,
   addRectangularRoom,
+  drawRoom,
+  detectRooms,
   addItem,
   updateItem,
   upsertMaterial,
   paint,
   remove,
   clearHome,
+  addPlanPicture,
+  scalePlanPicture,
+  placePlanPicture,
+  addCapture,
 } as const;
 
 export type CommandName = keyof typeof COMMANDS;
@@ -65,20 +87,31 @@ export const BaseOperationSchema = z.discriminatedUnion('op', [
   op('addLevel'),
   op('updateLevel'),
   op('addWall'),
+  op('drawWall'),
   op('updateWall'),
+  op('moveWall'),
   op('moveWallEnd'),
   op('setWallLength'),
+  op('splitWall'),
+  op('mergeWalls'),
+  op('joinWallEnd'),
   op('addOpening'),
   op('updateOpening'),
   op('addRoom'),
   op('updateRoom'),
   op('addRectangularRoom'),
+  op('drawRoom'),
+  op('detectRooms'),
   op('addItem'),
   op('updateItem'),
   op('upsertMaterial'),
   op('paint'),
   op('remove'),
   op('clearHome'),
+  op('addPlanPicture'),
+  op('scalePlanPicture'),
+  op('placePlanPicture'),
+  op('addCapture'),
 ]);
 
 export const MAX_BATCH = 500;
@@ -92,10 +125,15 @@ export const BatchSchema = z.strictObject({
 
 export const OperationSchema = z.union([BaseOperationSchema, BatchSchema]);
 
-export type BaseOperation = z.infer<typeof BaseOperationSchema>;
-export type Operation = z.infer<typeof OperationSchema>;
+/** One edit as data: a command's input plus its name, e.g. `{ op: 'addWall', start, end }`. */
+export type BaseOperation = { [N in CommandName]: z.input<(typeof COMMANDS)[N]['schema']> & { op: N } }[CommandName];
+/** An edit, or several applied together as one undo step. */
+export type Operation = BaseOperation | { op: 'batch'; label?: string; ops: BaseOperation[] };
 
-function parseOperation(input: unknown): Operation {
+type ParsedOperation = z.output<typeof OperationSchema>;
+type ParsedStep = z.output<typeof BaseOperationSchema>;
+
+function parseOperation(input: unknown): ParsedOperation {
   const isBatch = typeof input === 'object' && input !== null && (input as { op?: unknown }).op === 'batch';
   const result = isBatch ? BatchSchema.safeParse(input) : BaseOperationSchema.safeParse(input);
   if (!result.success) {
@@ -110,7 +148,7 @@ function parseOperation(input: unknown): Operation {
  *  refused edit; a failed batch step names its position in `details.opIndex`. */
 export function applyOperation(home: Home, input: unknown, ctx: EditContext = BY_USER): EditResult {
   const operation = parseOperation(input);
-  const steps: BaseOperation[] = operation.op === 'batch' ? operation.ops : [operation];
+  const steps: ParsedStep[] = operation.op === 'batch' ? operation.ops : [operation];
   return edit(home, ctx, (d) => {
     steps.forEach((step, opIndex) => {
       const { op: name, ...stepInput } = step;

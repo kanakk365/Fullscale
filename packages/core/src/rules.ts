@@ -71,11 +71,11 @@ export function openingProblems(home: Home, wall: Wall, o: OpeningShape): EditEr
     const heightOverlap = o.sill < other.sill + other.height - TOUCHING && other.sill < o.sill + o.height - TOUCHING;
     if (alongOverlap && heightOverlap) {
       problems.push(
-        new EditError(
-          'opening_overlap',
-          `${label} overlaps "${other.id}" (${m(other.offset)} to ${m(other.offset + other.width)}) on wall "${wall.id}". Move it, or place it anyway with force.`,
-          { id: o.id, wall: wall.id, other: other.id },
-        ),
+        new EditError('opening_overlap', `${label} overlaps "${other.id}" (${m(other.offset)} to ${m(other.offset + other.width)}) on wall "${wall.id}". Move it, or place it anyway with force.`, {
+          id: o.id,
+          wall: wall.id,
+          other: other.id,
+        }),
       );
     }
   }

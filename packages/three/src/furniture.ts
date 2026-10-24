@@ -19,9 +19,10 @@ const cyl = (rTop: number, rBottom: number, h: number, m: THREE.Material, x = 0,
 };
 
 function legs(g: THREE.Group, w: number, d: number, h: number, t: number, m: THREE.Material, inset = 0.03) {
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    g.add(box(t, h, t, m, sx * (w / 2 - inset - t / 2), 0, sz * (d / 2 - inset - t / 2)));
-  }
+  for (const sx of [-1, 1])
+    for (const sz of [-1, 1]) {
+      g.add(box(t, h, t, m, sx * (w / 2 - inset - t / 2), 0, sz * (d / 2 - inset - t / 2)));
+    }
 }
 
 export function buildFurniture(item: Item, mat: PartMaterials): THREE.Group {

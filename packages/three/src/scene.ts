@@ -72,7 +72,10 @@ function floorShape(polygon: [number, number][]): THREE.Shape {
   // Shape lives in XY; after rotateX(-90°) the point (x, y) lands at (x, 0, -y), so we
   // feed (x, -z) to land on (x, 0, z).
   const s = new THREE.Shape();
-  polygon.forEach(([x, z], i) => (i === 0 ? s.moveTo(x, -z) : s.lineTo(x, -z)));
+  polygon.forEach(([x, z], i) => {
+    if (i === 0) s.moveTo(x, -z);
+    else s.lineTo(x, -z);
+  });
   s.closePath();
   return s;
 }
@@ -146,7 +149,10 @@ export function buildHomeScene(home: Home, cache: MaterialCache, opts: BuildOpti
       lg.add(tag(mesh, wall.id, 'wall'));
       for (const o of home.openings.filter((x) => x.wall === wall.id)) {
         const fill = buildOpeningFill(wall, o, { frame: cache.frame, glass: cache.glass, door: cache.door });
-        if (highlight.has(o.id)) fill.traverse((c) => { if ((c as THREE.Mesh).isMesh) (c as THREE.Mesh).material = highlighted((c as THREE.Mesh).material as THREE.Material, cache); });
+        if (highlight.has(o.id))
+          fill.traverse((c) => {
+            if ((c as THREE.Mesh).isMesh) (c as THREE.Mesh).material = highlighted((c as THREE.Mesh).material as THREE.Material, cache);
+          });
         lg.add(tag(fill, o.id, 'opening'));
       }
     }

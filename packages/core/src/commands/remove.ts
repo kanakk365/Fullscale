@@ -5,6 +5,7 @@ import { EditError } from '../errors.ts';
 import { dependentsOf, elementsOf, locate } from '../kinds.ts';
 import { IdSchema, type Home } from '../schema.ts';
 import { defineCommand } from './edit.ts';
+import { keepRoomsOnWalls } from './follow.ts';
 
 /** Everything that deleting `ids` would remove, including cascades. Throws if the delete
  *  must be refused. Lets a person or agent preview "this also removes door-2". */
@@ -23,7 +24,10 @@ export function planRemove(home: Home, ids: readonly string[]): string[] {
   for (const id of removing) {
     const blockers = dependentsOf(home, id).filter((dep) => dep.onDelete === 'refuse' && !removing.has(dep.id));
     if (blockers.length) {
-      const names = blockers.slice(0, 6).map((b) => b.id).join(', ');
+      const names = blockers
+        .slice(0, 6)
+        .map((b) => b.id)
+        .join(', ');
       const more = blockers.length > 6 ? ` and ${blockers.length - 6} more` : '';
       throw new EditError('in_use', `Can't delete "${id}": ${names}${more} still use${blockers.length === 1 ? 's' : ''} it. Delete or change ${blockers.length === 1 ? 'it' : 'them'} first.`, {
         id,
@@ -39,11 +43,16 @@ export function planRemove(home: Home, ids: readonly string[]): string[] {
 
 export const remove = defineCommand(z.strictObject({ ids: z.array(IdSchema).min(1).max(500) }), (d, { ids }) => {
   const doomed = new Set(planRemove(d.home, ids));
-  for (const collection of ['levels', 'walls', 'openings', 'rooms', 'items', 'materials', 'captures'] as const) {
-    const list = elementsOf(d.home, collection);
-    const kept = list.filter((x) => !doomed.has(x.id));
-    if (kept.length !== list.length) (d.home[collection] as unknown[]) = kept;
-  }
+  const removeAll = () => {
+    for (const collection of ['levels', 'walls', 'openings', 'rooms', 'items', 'materials', 'captures'] as const) {
+      const list = elementsOf(d.home, collection);
+      const kept = list.filter((x) => !doomed.has(x.id));
+      if (kept.length !== list.length) (d.home[collection] as unknown[]) = kept;
+    }
+  };
+  // Removing a wall reshapes the rooms that followed it (two rooms can become one).
+  if (d.home.walls.some((w) => doomed.has(w.id))) keepRoomsOnWalls(d, { create: false }, removeAll);
+  else removeAll();
 });
 
 /** The only way to empty a home on purpose. Keeps levels and materials. */

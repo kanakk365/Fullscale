@@ -2,7 +2,7 @@
 // finishes, the result is checked once, the sources of changed dimensions are updated,
 // and the exact field-level patch is returned. Nothing is ever half-applied: if a command
 // throws, the original home is untouched.
-import { z } from 'zod';
+import type { z } from 'zod';
 import { EditError } from '../errors.ts';
 import { kindOfCollection } from '../kinds.ts';
 import { achievedBy, deepEqual, diffHomes, touchedIds, type Achieved, type Patch } from '../patch.ts';

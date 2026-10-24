@@ -20,9 +20,7 @@ export interface LogEntry {
   groupKey?: string;
 }
 
-export type UndoResult =
-  | { ok: true; home: Home; entry: LogEntry }
-  | { ok: false; reason: 'nothing' | 'conflict'; conflicts: Conflict[]; message: string };
+export type UndoResult = { ok: true; home: Home; entry: LogEntry } | { ok: false; reason: 'nothing' | 'conflict'; conflicts: Conflict[]; message: string };
 
 export interface HistoryOptions {
   /** how many entries to keep per actor and in the shared log */
@@ -59,13 +57,7 @@ export class History {
     const top = stack[stack.length - 1];
     this.redoStacks.set(input.actor, []);
 
-    if (
-      input.groupKey !== undefined &&
-      top?.groupKey === input.groupKey &&
-      time - top.time <= this.mergeWindowMs &&
-      onlyUpdates(top.patch) &&
-      onlyUpdates(input.patch)
-    ) {
+    if (input.groupKey !== undefined && top?.groupKey === input.groupKey && time - top.time <= this.mergeWindowMs && onlyUpdates(top.patch) && onlyUpdates(input.patch)) {
       top.patch = mergeUpdates(top.patch, input.patch);
       top.rev = input.rev;
       top.time = time;

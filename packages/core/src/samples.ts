@@ -43,11 +43,22 @@ export function sampleFlat(): Home {
   run((x) => addItem(x, { catalog: 'plant', position: [0.4, 3.6] }));
 
   // Kitchen: units along the east wall, facing west
-  for (const [catalog, z] of [['kitchen-base', 0.32], ['kitchen-base', 0.92], ['cooker', 1.52], ['kitchen-base', 2.12], ['fridge', 2.74]] as const) {
+  for (const [catalog, z] of [
+    ['kitchen-base', 0.32],
+    ['kitchen-base', 0.92],
+    ['cooker', 1.52],
+    ['kitchen-base', 2.12],
+    ['fridge', 2.74],
+  ] as const) {
     run((x) => addItem(x, { catalog, position: [7.8, z], rotation: 270 }));
   }
   run((x) => addItem(x, { catalog: 'dining-table-4', position: [6.2, 2.4], rotation: 90 }));
-  for (const [cx, cz, rot] of [[5.5, 2.1, 90], [5.5, 2.7, 90], [6.9, 2.1, 270], [6.9, 2.7, 270]] as const) {
+  for (const [cx, cz, rot] of [
+    [5.5, 2.1, 90],
+    [5.5, 2.7, 90],
+    [6.9, 2.1, 270],
+    [6.9, 2.7, 270],
+  ] as const) {
     run((x) => addItem(x, { catalog: 'chair', position: [cx, cz], rotation: rot }));
   }
 
