@@ -1,0 +1,17 @@
+{
+  "name": "@fullscale/three",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Builds a Three.js scene from a home document",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@fullscale/core": "*"
+  },
+  "peerDependencies": {
+    "three": ">=0.180.0"
+  }
+}

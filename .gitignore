@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.vite/
+coverage/
+*.log
+.DS_Store
+# Real captures and personal homes are private: never commit them
+data/captures-in/
+data/private/
+data/homes/*
+!data/homes/.gitkeep
+!data/homes/samples/
+# Your own 3D models (e.g. downloaded from a shop's website) stay on your computer
+data/models/*
+!data/models/README.md
+renders/
+# Maintainers' private notes
+notes/
+CLAUDE.local.md
+.env

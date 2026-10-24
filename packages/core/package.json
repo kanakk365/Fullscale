@@ -1,0 +1,14 @@
+{
+  "name": "@fullscale/core",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Home document schema, geometry, measurements, edits and validation",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

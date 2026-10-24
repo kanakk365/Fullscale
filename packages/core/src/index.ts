@@ -1,0 +1,23 @@
+// The home document and everything that reads or edits it. Pure TypeScript: no React,
+// three.js, Node or browser APIs, so the server, the editor, tests and agents all share it.
+export * from './schema.ts';
+export * from './errors.ts';
+export * from './kinds.ts';
+export * from './ids.ts';
+export * from './resolve.ts';
+export * from './units.ts';
+export * from './geometry.ts';
+export * from './joins.ts';
+export * from './catalog.ts';
+export * from './rules.ts';
+export * from './measure.ts';
+export * from './commands/index.ts';
+export * from './operations.ts';
+export * from './patch.ts';
+export * from './history.ts';
+export * from './migrate.ts';
+export * from './validate.ts';
+export * from './summary.ts';
+export * from './samples.ts';
+export * from './placement.ts';
+export * from './plan-svg.ts';
