@@ -1,0 +1,185 @@
+{
+  "about": "Shared test cases for reading typed lengths and grading tape checks. The engine (TypeScript), the iPhone app (Swift) and the Android app (Kotlin) all test against this file, so they read lengths and grade checks the same way.",
+  "lengths": [
+    {
+      "input": "3.41",
+      "unit": "m",
+      "metres": 3.41
+    },
+    {
+      "input": "3.41 m",
+      "unit": "m",
+      "metres": 3.41
+    },
+    {
+      "input": "341 cm",
+      "unit": "m",
+      "metres": 3.41
+    },
+    {
+      "input": "3410 mm",
+      "unit": "m",
+      "metres": 3.41
+    },
+    {
+      "input": "341",
+      "unit": "cm",
+      "metres": 3.41
+    },
+    {
+      "input": "1m80",
+      "unit": "m",
+      "metres": 1.8
+    },
+    {
+      "input": ".5 m",
+      "unit": "m",
+      "metres": 0.5
+    },
+    {
+      "input": "11' 2\"",
+      "unit": "m",
+      "metres": 3.4036
+    },
+    {
+      "input": "11 ft 2 in",
+      "unit": "m",
+      "metres": 3.4036
+    },
+    {
+      "input": "2' 6 1/2\"",
+      "unit": "m",
+      "metres": 0.7747
+    },
+    {
+      "input": "6 ft",
+      "unit": "m",
+      "metres": 1.8288
+    },
+    {
+      "input": "84 in",
+      "unit": "m",
+      "metres": 2.1336
+    },
+    {
+      "input": "84\"",
+      "unit": "m",
+      "metres": 2.1336
+    },
+    {
+      "input": "11'",
+      "unit": "m",
+      "metres": 3.3528
+    },
+    {
+      "input": "11",
+      "unit": "ft",
+      "metres": 3.3528
+    },
+    {
+      "input": "3/4\"",
+      "unit": "m",
+      "metres": 0.01905
+    },
+    {
+      "input": "3.4 metres",
+      "unit": "m",
+      "metres": 3.4
+    },
+    {
+      "input": "  2.5 M ",
+      "unit": "m",
+      "metres": 2.5
+    },
+    {
+      "input": "11′ 2″",
+      "unit": "m",
+      "metres": 3.4036
+    },
+    {
+      "input": "1,234",
+      "unit": "m",
+      "refused": true
+    },
+    {
+      "input": "3,41 m",
+      "unit": "m",
+      "refused": true
+    },
+    {
+      "input": "",
+      "unit": "m",
+      "refused": true
+    },
+    {
+      "input": "abc",
+      "unit": "m",
+      "refused": true
+    },
+    {
+      "input": "3.4 furlongs",
+      "unit": "m",
+      "refused": true
+    },
+    {
+      "input": "5²",
+      "unit": "m",
+      "refused": true
+    },
+    {
+      "input": "1/0\"",
+      "unit": "m",
+      "refused": true
+    }
+  ],
+  "tapeRange": {
+    "minM": 0.2,
+    "maxM": 20,
+    "confirmAbovePercent": 10
+  },
+  "bands": {
+    "rule": "green: within 1% and within 2 cm; amber: within 2% or within 5 cm; red: anything more",
+    "cases": [
+      {
+        "scanM": 4.01,
+        "tapeM": 4.0,
+        "band": "green"
+      },
+      {
+        "scanM": 0.8,
+        "tapeM": 0.81,
+        "band": "amber"
+      },
+      {
+        "scanM": 4.03,
+        "tapeM": 4.0,
+        "band": "amber"
+      },
+      {
+        "scanM": 10.15,
+        "tapeM": 10.0,
+        "band": "amber"
+      },
+      {
+        "scanM": 4.1,
+        "tapeM": 4.0,
+        "band": "red"
+      },
+      {
+        "scanM": 1.98,
+        "tapeM": 2.0,
+        "band": "green"
+      },
+      {
+        "scanM": 1.979,
+        "tapeM": 2.0,
+        "band": "amber"
+      },
+      {
+        "scanM": 2.6,
+        "tapeM": 2.4,
+        "band": "red"
+      }
+    ]
+  }
+}
