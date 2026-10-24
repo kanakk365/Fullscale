@@ -1,9 +1,14 @@
 // Rasterise the SVG plan to PNG without a GPU.
 import { Resvg } from '@resvg/resvg-js';
-import { renderPlanSvg, type Home, type PlanSvgOptions } from '@fullscale/core';
+import { renderPlanSvg, type PlanSvg, type PlanSvgOptions, type Home } from '@fullscale/core';
 
-export function renderPlanPng(home: Home, opts: PlanSvgOptions = {}): { png: Buffer; width: number; height: number; metresPerPixel: number } {
-  const { svg, width, height, metresPerPixel } = renderPlanSvg(home, opts);
+export function renderPlanPng(home: Home, opts: PlanSvgOptions = {}): Omit<PlanSvg, 'svg'> & { png: Buffer } {
+  const { svg, ...info } = renderPlanSvg(home, opts);
+  return { ...info, png: svgToPng(svg, info.width) };
+}
+
+/** Rasterise any SVG at a pixel width. */
+export function svgToPng(svg: string, width: number): Buffer {
   const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: width }, font: { loadSystemFonts: true } });
-  return { png: Buffer.from(resvg.render().asPng()), width, height, metresPerPixel };
+  return Buffer.from(resvg.render().asPng());
 }

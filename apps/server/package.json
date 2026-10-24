@@ -3,16 +3,28 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Studio server: owns the home document, serves the editor over WebSocket and agents over MCP",
+  "description": "Studio server: owns the home, serves the editor and Blender over WebSocket and agents over MCP",
   "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts serve"
+  },
   "dependencies": {
+    "@fullscale/capture": "*",
+    "@fullscale/core": "*",
+    "@fullscale/protocol": "*",
+    "@fullscale/three": "*",
     "@modelcontextprotocol/node": "^2.1.2",
     "@modelcontextprotocol/server": "^2.4.0",
-    "@fullscale/core": "*",
     "@resvg/resvg-js": "^2.6.2",
-    "ws": "^8.22.0"
+    "three": "^0.186.1",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
     "@types/ws": "^8.18.2",
     "tsx": "^4.23.15"
   }
