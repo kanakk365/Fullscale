@@ -1,0 +1,38 @@
+# The iPhone app's Xcode project, generated with XcodeGen (brew install xcodegen; then
+# "xcodegen" in this folder). The app's logic lives in ../CaptureKit, tested on a Mac.
+name: FullscaleCapture
+options:
+  bundleIdPrefix: org.fullscale
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  CaptureKit:
+    path: ../CaptureKit
+targets:
+  FullscaleCapture:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    dependencies:
+      - package: CaptureKit
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Fullscale
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSCameraUsageDescription: Fullscale uses the camera to scan your rooms. Nothing leaves your phone unless you share it.
+        UIRequiredDeviceCapabilities: [arkit]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        # iPads with LiDAR scan too, and an iPad app must allow every orientation.
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.fullscale.capture
+        # Swift 6, like CaptureKit: the compiler checks which thread each piece of state is used
+        # on, and the app checks it again as it runs.
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
