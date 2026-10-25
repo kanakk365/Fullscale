@@ -2,10 +2,11 @@
 // see an agent's edits arrive. Needs a Chromium: run "npx playwright-core install
 // chromium-headless-shell" once, or point FULLSCALE_BROWSER at one. Without it, these
 // tests are skipped.
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sampleFlat, wallLength, type Vec2 } from '@fullscale/core';
+import { createHome, sampleFlat, wallLength, type Vec2 } from '@fullscale/core';
+import { exportHomeGlb } from '@fullscale/three';
 import { chromium, type Browser, type Page } from 'playwright-core';
 import { build } from 'vite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -19,6 +20,7 @@ let editorDir: string;
 let studio: Studio;
 let server: StudioServer;
 let page: Page;
+let homeDir: string;
 
 describe.skipIf(!browserPath)('the editor in a browser', () => {
   beforeAll(async () => {
@@ -34,6 +36,7 @@ describe.skipIf(!browserPath)('the editor in a browser', () => {
   beforeEach(async () => {
     await server?.close();
     const dir = mkdtempSync(join(tmpdir(), 'fullscale-e2e-'));
+    homeDir = dir;
     studio = new Studio({ home: sampleFlat() });
     server = await startStudioServer({ studio, token: TOKEN, port: 0, editorDir, paths: { data: dir, models: join(dir, 'models'), run: join(dir, 'run'), homeDir: dir }, log: () => undefined });
     page = await browser.newPage({ viewport: { width: 1400, height: 860 } });
@@ -143,6 +146,26 @@ describe.skipIf(!browserPath)('the editor in a browser', () => {
     studio.apply({ op: 'addItem', id: 'agent-box', catalog: 'box', position: [2.5, 2.5] }, { actor: 'agent', by: 'agent' });
     await page.waitForSelector('[data-id="agent-box"]');
     expect(await page.locator('.toast').textContent()).toContain('agent');
+  });
+
+  it('switches the 3D view to a scan’s detailed model, where one has been built', async () => {
+    const level = studio.home.levels[0]!.id;
+    const toHome = { yaw: 0, offset: [0, 0] as Vec2, floorY: 0, level };
+    studio.apply({ op: 'addCapture', kind: 'phone-capture', path: 'captures/not-built', toHome }, { actor: 'person', by: 'user' });
+    await page.getByRole('button', { name: '3D', exact: true }).click();
+    const scan = page.locator('.scene-switch button', { hasText: 'Scan' });
+    await expect.poll(() => scan.isDisabled()).toBe(true);
+    expect(await scan.getAttribute('title')).toContain('room-builder');
+
+    // A stand-in for the room builder's file: any GLB in the capture's built/ folder.
+    mkdirSync(join(homeDir, 'captures', 'built-one', 'built'), { recursive: true });
+    writeFileSync(join(homeDir, 'captures', 'built-one', 'built', 'room.glb'), exportHomeGlb(createHome({ name: 'scan' })));
+    studio.apply({ op: 'addCapture', kind: 'phone-capture', path: 'captures/built-one', toHome }, { actor: 'person', by: 'user' });
+    const loaded = page.waitForResponse((r) => r.url().endsWith('/captures/built-one/built/room.glb') && r.ok());
+    await expect.poll(() => scan.isEnabled()).toBe(true);
+    await scan.click();
+    await loaded;
+    await expect.poll(async () => (await scan.getAttribute('class')) ?? '').toContain('on');
   });
 
   it('draws 3D pictures for agents', async () => {

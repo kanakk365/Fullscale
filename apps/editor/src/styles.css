@@ -512,6 +512,13 @@ input {
   min-height: 0;
 }
 
+.scene-switch {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+}
+
 .scene.empty {
   display: grid;
   place-items: center;

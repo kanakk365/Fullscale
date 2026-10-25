@@ -1,14 +1,17 @@
 // The 3D view: the home built by @fullscale/three (the same builder Blender's file comes
-// from), lit softly, with the camera orbiting the level. Clicking selects.
+// from), lit softly, with the camera orbiting the level. Clicking selects. Where the level
+// was scanned, a switch shows the scan's detailed model instead.
 import { buildHomeScene, disposeScene, MaterialCache, pickedElement, type BuildOptions } from '@fullscale/three';
 import type { Home } from '@fullscale/core';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type * as THREE from 'three';
 import { select } from '../app/actions.ts';
-import { shownHome, useEditor } from '../app/store.ts';
+import { setState, shownHome, useEditor } from '../app/store.ts';
 import { cameraFor, frameCentre } from './camera.ts';
 import { useModels } from './models.ts';
+import { useScans, type Scans } from './scans.ts';
 
 /** The live view's lens; framing uses the same, so the home fills the view. */
 const LIVE_FOV = 40;
@@ -19,9 +22,13 @@ const LIVE_CLOSER = 0.72;
 export function SceneView() {
   const home = useEditor(shownHome);
   const level = useEditor((s) => s.level);
+  const showScan = useEditor((s) => s.showScan);
+  const scans = useScans(home, level);
   if (!home || !level) return <div className="scene empty">Waiting for the home…</div>;
+  const scanShown = showScan && scans.models.length > 0;
   return (
     <div className="scene">
+      {scans.captures > 0 && <ScanSwitch scans={scans} on={showScan} />}
       <Canvas shadows dpr={[1, 2]} camera={{ fov: LIVE_FOV, near: 0.05, far: 1000 }} onPointerMissed={() => select([])} gl={{ antialias: true }}>
         <color attach="background" args={['#eef0f2']} />
         <hemisphereLight args={['#ffffff', '#b9b2a6', 1.4]} />
@@ -35,10 +42,37 @@ export function SceneView() {
           shadow-camera-top={20}
           shadow-camera-bottom={-20}
         />
-        <HomeModel home={home} level={level} />
+        {scanShown ? <ScanModels models={scans.models} /> : <HomeModel home={home} level={level} />}
         <CameraRig home={home} level={level} />
       </Canvas>
     </div>
+  );
+}
+
+function ScanSwitch({ scans, on }: { scans: Scans; on: boolean }) {
+  const none = !scans.loading && scans.models.length === 0;
+  const scanTitle = none
+    ? 'No detailed model of this scan yet. Build one with: npm run room-builder -- build <the capture folder>'
+    : 'The scan as captured: photo colours and everything in the room. Edits happen on the model.';
+  return (
+    <div className="scene-switch segmented">
+      <button type="button" className={on ? '' : 'on'} title="The editable model" onClick={() => setState({ showScan: false })}>
+        Model
+      </button>
+      <button type="button" className={on ? 'on' : ''} title={scanTitle} disabled={none} onClick={() => setState({ showScan: true })}>
+        {on && scans.loading ? 'Scan…' : 'Scan'}
+      </button>
+    </div>
+  );
+}
+
+function ScanModels({ models }: { models: THREE.Object3D[] }) {
+  return (
+    <>
+      {models.map((m) => (
+        <primitive key={m.uuid} object={m} />
+      ))}
+    </>
   );
 }
 

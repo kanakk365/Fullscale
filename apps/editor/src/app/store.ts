@@ -26,6 +26,8 @@ export interface EditorState {
   /** grid step in metres */
   grid: number;
   view: 'plan' | '3d' | 'split';
+  /** the 3D view shows phone captures' detailed models instead of the editable model */
+  showScan: boolean;
   /** elements an agent pointed out */
   highlight: { actor: string; ids: string[]; note?: string } | null;
   /** what another actor (usually an agent) has selected */
@@ -52,6 +54,7 @@ const initial: EditorState = {
   snap: 'lines',
   grid: 0.1,
   view: 'plan',
+  showScan: false,
   highlight: null,
   othersSelection: [],
   message: null,
