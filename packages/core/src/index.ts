@@ -16,6 +16,7 @@ export * from './rules.ts';
 export * from './measure.ts';
 export * from './fit.ts';
 export * from './camera.ts';
+export * from './scan-placement.ts';
 export * from './commands/index.ts';
 export * from './operations.ts';
 export * from './patch.ts';

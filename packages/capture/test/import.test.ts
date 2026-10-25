@@ -1,6 +1,6 @@
-import { applyOperation, createHome, polygonArea, sameOutline, wallLength, type Home, type Vec2 } from '@fullscale/core';
+import { applyOperation, captureToHomeMatrix, captureToPlan, createHome, polygonArea, sameOutline, wallLength, type Home, type Vec2 } from '@fullscale/core';
 import { describe, expect, it } from 'vitest';
-import { importScan, readRoomPlan, syntheticRoomPlan, type SyntheticRoom } from '../src/index.ts';
+import { importScan, readRoomPlan, syntheticRoomPlan, transformPoint, type SyntheticRoom } from '../src/index.ts';
 
 /** A world turned 30° and shifted, as an AR session starts wherever the phone happens to be. */
 const WORLD = { yaw: 30, offset: [3, -1.2, -2] as [number, number, number] };
@@ -33,6 +33,22 @@ describe('importing a scanned room', () => {
     expect(home.levels[0]!.height).toBeCloseTo(2.6, 6);
     // The import turned the capture back by the angle the AR world happened to start at.
     expect(result.toHome.yaw).toBeCloseTo(-WORLD.yaw, 6);
+  });
+
+  it('records where the capture went, so its mesh and detailed model line up with the walls', () => {
+    const room = { corners: rectangle(4, 3), height: 2.6 };
+    const { home, result } = imported([room]);
+    const ends = home.walls.flatMap((w) => [w.start, w.end]);
+    for (const w of readRoomPlan(syntheticRoomPlan(room, WORLD)).walls) {
+      for (const side of [-0.5, 0.5]) {
+        const p = transformPoint(w.transform, [w.size[0] * side, 0, 0]);
+        const [x, z] = captureToPlan(result.toHome, p[0], p[2]);
+        expect(Math.min(...ends.map((e) => Math.hypot(e[0] - x, e[1] - z)))).toBeLessThan(1e-5);
+      }
+    }
+    const m = captureToHomeMatrix(result.toHome, home.levels[0]!.elevation);
+    // The capture's floor height lands on the level's floor.
+    expect(WORLD.offset[1] + m[13]!).toBeCloseTo(home.levels[0]!.elevation, 6);
   });
 
   it('marks scanned numbers with their source and uncertainty', () => {
@@ -111,6 +127,14 @@ describe('reading scanner files', () => {
     expect(room.walls).toHaveLength(4);
     expect(room.problems.join(' ')).toMatch(/stretches or mirrors/);
     expect(room.problems.join(' ')).toMatch(/used twice/);
+  });
+
+  it('reports an element with a number the phone wrote as "nan" and reads the rest', () => {
+    const layout = syntheticRoomPlan({ corners: rectangle(4, 3), height: 2.6 }, WORLD) as { walls: Array<Record<string, unknown>> };
+    layout.walls.push({ ...layout.walls[0]!, identifier: 'not-a-number', dimensions: ['nan', 2.6, 0] });
+    const room = readRoomPlan(JSON.parse(JSON.stringify(layout)));
+    expect(room.walls).toHaveLength(4);
+    expect(room.problems.join(' ')).toMatch(/walls\[4\]: dimensions/);
   });
 
   it('reads transforms written as four columns', () => {
