@@ -4,6 +4,15 @@ Capture, design and edit spaces in 3D at **real size**, together with an AI agen
 
 Scan a room with your phone, or start from a floor plan or a blank page, then redesign it: draw walls, add doors and windows, place furniture, change colours. Every dimension says where it came from and how sure it is ("3.42 m ±1 cm, scanned"), and stays honest as you edit. An AI agent edits the same space through MCP, live, next to you, and Blender opens it for photo-real pictures.
 
+## How it works
+
+1. **Install** the Fullscale app on your phone and the studio on your computer, and **connect your own AI agent** (Claude or any other) to the studio through MCP.
+2. **Scan** your space room by room with the phone (LiDAR and photos). Scans are organised as spaces ("Home", "Office") with their rooms, and you can scan more of a room later to add to it.
+3. **Your agent takes it from there.** It gets the data from the studio and makes, in the editor:
+   - a **realistic 3D model**: walls, doors, windows and furniture at their real sizes, every one editable;
+   - a **real-life scan view**: the space exactly as the phone captured it, with its photo colours.
+4. **Redesign it together**: ask the agent to repaint, remove or add things, try real furniture (a product you found online, or a piece you scanned with the phone), and check that it fits, through the door too.
+
 > **Status: early.** The studio, the editor, the agent tools, the scan importer, the room builder and the Blender link work and are tested. The iPhone app runs on a phone and has made its first real scans. See [the plan](docs/PLAN.md).
 
 ![The editor: plan and 3D side by side](docs/images/editor.png)

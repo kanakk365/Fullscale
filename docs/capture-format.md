@@ -38,7 +38,7 @@ The importer (`packages/capture`) turns a capture into an editable home where ev
   colour/cards.jsonl                grey or colour card shots
   log/events.jsonl                  events (tracking lost, thermal state, memory warnings…)
   log/diagnostics.json              counts of every outcome (photos kept, depth frames skipped and why…)
-  worldmap.arworldmap               optional, to continue the capture later
+  worldmap.arworldmap               the phone's map of the place, saved after each room, to continue later
   built/                            made on the computer by the room builder, never by the phone:
   built/room.glb                      the detailed, coloured model, in this capture's world frame
   built/build.json                    what was built, from what, and with which settings
@@ -51,7 +51,7 @@ Only `manifest.json` is required. Everything else is optional, so a phone withou
 | Field | Meaning |
 |---|---|
 | `format` | `"fullscale-capture/1"` |
-| `revision` | integer; grows when fields are added |
+| `revision` | integer; grows when fields are added (2 since 2026-10-26: `space`, and `spaceRoom` and `addsTo` on rooms) |
 | `id` | the folder name |
 | `status` | `recording`, `complete` or `interrupted` |
 | `createdAt`, `endedAt` | UTC, ISO 8601 ending in `Z` |
@@ -60,9 +60,10 @@ Only `manifest.json` is required. Everything else is optional, so a phone withou
 | `device` | `{ model, os, osVersion, lidar }`: the model identifier (e.g. `iPhone18,1`), never the device's name |
 | `tier` | `1` LiDAR + scanner, `2` camera only (AR tracking), `3` Android ARCore, `4` photos only |
 | `ar` | `{ videoFormat: { width, height, fps }, highResolutionStills }` |
-| `rooms` | `[{ id, name, dir, startedAt, endedAt? }]` in scan order |
+| `space` | `{ id, name }`: the phone library's space the rooms belong to ("Home"), when the app keeps one (revision 2) |
+| `rooms` | `[{ id, name, dir, startedAt, endedAt?, spaceRoom?, addsTo? }]` in scan order. `spaceRoom` (`{ id, name }`) is the library room this is a scan of; `addsTo` (`{ capture, room }`) names the earlier scan of the same room this one adds to (revision 2) |
 | `counts` | `{ photos, keyframes, poses, tapeChecks, cards, depthSkipped: { motion, busy, noDepth, writeFailed } }` |
-| `alignment` | `{ method: "first" \| "relocalized" \| "unaligned", residualM? }`: how this session's world relates to an earlier one (continuing another day) |
+| `alignment` | `{ method: "first" \| "relocalized" \| "unaligned", residualM? }`: how this session's world relates to an earlier one. `relocalized`: the phone recognised the place an earlier capture mapped (its `worldmap.arworldmap`) and carried on in the same coordinates, so rooms that add to that capture's rooms line up as they are. `unaligned`: the phone couldn't, and the computer must line the scans up by their shapes |
 
 ## Records
 
