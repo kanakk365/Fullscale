@@ -46,15 +46,28 @@ If the phone says it can't verify the app, it needs the internet once to check w
 
 Captures appear in the app and in the Files app (On My iPhone → Fullscale → Captures). Share one as a zip (AirDrop to the Mac), unzip it inside your home's folder, and import it with the `import_capture` agent tool.
 
-From the command line, with the phone connected and its team chosen once in Xcode (`xcrun devicectl list devices` gives the phone's id). Real captures go in `data/captures-in/`, which git ignores:
+From the command line, with the phone connected (`xcrun devicectl list devices` gives the phone's id). Give your team id (Xcode → Settings → Accounts) on the command line, so it never goes into the shared project file. Real captures go in `data/captures-in/`, which git ignores:
 
 ```sh
 xcodebuild -project FullscaleCapture.xcodeproj -scheme FullscaleCapture -destination 'id=<phone id>' \
-  -derivedDataPath /tmp/fullscale-dd -allowProvisioningUpdates build
+  -derivedDataPath /tmp/fullscale-dd -allowProvisioningUpdates DEVELOPMENT_TEAM=<team id> build
 xcrun devicectl device install app --device <phone id> /tmp/fullscale-dd/Build/Products/Debug-iphoneos/FullscaleCapture.app
 xcrun devicectl device copy from --device <phone id> --domain-type appDataContainer --domain-identifier org.fullscale.capture \
   --source Documents/Captures/<capture id> --destination ../../../data/captures-in/<capture id>
 ```
+
+## Using the app
+
+- **Spaces and rooms.** The first screen lists your spaces ("Home", "Office"); each holds its rooms with their sizes. A capture records which space and room it is of (`space`, `spaceRoom` in the manifest).
+- **Scanning a room.** Pick a new room (with suggested names) or one to scan more of. The scan screen shows:
+  - the camera with what's been captured painted over it in teal, so gaps stand out;
+  - one coaching line at the top saying what to do next;
+  - a live 3D model of the room as it's found, with the phone's position (tap to enlarge);
+  - a checklist (walls, floor, ceiling, photos) and a progress ring that turns green, with a haptic tap, when the room is complete. **Finish** asks first if something is missing.
+- **After each room:** the saved room as a model to turn, its floor area, size and ceiling height, then tape checks (tap a wall, type the tape value, see the difference at once), and **Scan another room**, **Scan more of** this room (same session, so it lines up exactly) or **Done**.
+- **Scanning more later.** The phone saves its map of the place after each room. "Scan more" loads it and asks you to look around where you scanned before; once the phone recognises the place, the new scan carries on in the same coordinates (`alignment: relocalized`, `addsTo` naming the earlier scan). If it can't, you can carry on without lining up, and the computer lines the scans up later (`unaligned`).
+- **Units:** metres or feet and inches (Settings), from the phone's region at first.
+- **Sending:** each scan in a room has a Send button (AirDrop a zip to the computer). Settings lists every capture on the phone.
 
 ### A first real scan
 

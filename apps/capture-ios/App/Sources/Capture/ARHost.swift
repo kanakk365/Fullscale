@@ -32,9 +32,39 @@ final class ARHost: NSObject {
     private(set) var meshAnchors: [UUID: (anchor: ARMeshAnchor, room: UInt8)] = [:]
     private var currentRoom: UInt8 = 255
 
-    func start() {
+    /// Start the camera. With a map saved by an earlier capture, the phone looks for that
+    /// place and, once it recognises it, carries on in the same coordinates, so a new scan of
+    /// a room lines up with the old one.
+    func start(worldMap: ARWorldMap? = nil) {
         session.delegate = self
-        session.run(configuration())
+        let config = configuration()
+        config.initialWorldMap = worldMap
+        session.run(config)
+    }
+
+    /// Forget the earlier capture's map and start a fresh world, when the place can't be found.
+    func restartWithoutMap() {
+        meshAnchors = [:]
+        session.run(configuration(), options: [.resetTracking, .removeExistingAnchors])
+    }
+
+    /// The phone's map of the place so far, ready to save, so a later capture can continue it.
+    func worldMapData() async -> Data? {
+        await withCheckedContinuation { (done: CheckedContinuation<Data?, Never>) in
+            session.getCurrentWorldMap { map, _ in
+                done.resume(returning: map.flatMap { try? NSKeyedArchiver.archivedData(withRootObject: $0, requiringSecureCoding: true) })
+            }
+        }
+    }
+
+    static func worldMap(from data: Data) -> ARWorldMap? {
+        try? NSKeyedUnarchiver.unarchivedObject(ofClass: ARWorldMap.self, from: data)
+    }
+
+    /// How much ceiling and floor the depth sensor has seen, in square metres.
+    func seenAreas() async -> MeshAreas {
+        let anchors = SendableAnchors(list: meshAnchors.values.map(\.anchor))
+        return await Task.detached(priority: .utility) { MeshAreas.of(anchors.list) }.value
     }
 
     func stop() {
@@ -58,6 +88,12 @@ final class ARHost: NSObject {
 
     private func configuration() -> ARWorldTrackingConfiguration {
         let config = ARWorldTrackingConfiguration()
+        // The format recommended for full-resolution stills gives 12 MP and up, instead of
+        // stills barely bigger than the video. Whether the room scanner keeps it shows in the
+        // stills' recorded size.
+        if let format = ARWorldTrackingConfiguration.recommendedVideoFormatForHighResolutionFrameCapturing {
+            config.videoFormat = format
+        }
         if hasLiDAR {
             config.sceneReconstruction = .meshWithClassification
             config.frameSemantics.insert(.sceneDepth)
@@ -166,5 +202,42 @@ extension ARHost: RoomCaptureSessionDelegate {
         case .lowTexture: .lowTexture
         default: .normal
         }
+    }
+}
+
+/// Mesh anchors handed to a background task. ARKit doesn't change an anchor once it has given
+/// it out (updates arrive as new anchors), so reading one from another thread is safe.
+private struct SendableAnchors: @unchecked Sendable {
+    let list: [ARMeshAnchor]
+}
+
+struct MeshAreas: Sendable {
+    var ceilingM2 = 0.0
+    var floorM2 = 0.0
+
+    static func of(_ anchors: [ARMeshAnchor]) -> MeshAreas {
+        var areas = MeshAreas()
+        for anchor in anchors {
+            let geometry = anchor.geometry
+            guard let classes = geometry.classification else { continue }
+            let vertices = geometry.vertices
+            let faces = geometry.faces
+            let vertexBase = vertices.buffer.contents().advanced(by: vertices.offset)
+            let faceBase = faces.buffer.contents()
+            let classBase = classes.buffer.contents().advanced(by: classes.offset)
+            func vertex(_ i: Int) -> SIMD3<Float> {
+                vertexBase.advanced(by: i * vertices.stride).assumingMemoryBound(to: SIMD3<Float>.self).pointee
+            }
+            for face in 0..<faces.count {
+                let kind = classBase.advanced(by: face * classes.stride).load(as: UInt8.self)
+                // ARMeshClassification: 2 floor, 3 ceiling.
+                guard kind == 2 || kind == 3 else { continue }
+                let index = faceBase.advanced(by: face * faces.indexCountPerPrimitive * faces.bytesPerIndex).assumingMemoryBound(to: UInt32.self)
+                let a = vertex(Int(index[0]))
+                let area = Double(simd_length(simd_cross(vertex(Int(index[1])) - a, vertex(Int(index[2])) - a))) / 2
+                if kind == 3 { areas.ceilingM2 += area } else { areas.floorM2 += area }
+            }
+        }
+        return areas
     }
 }

@@ -34,6 +34,20 @@ final class Recorder {
     private(set) var lastCapture: URL?
     /// Walls and openings the scanner has found in the current room, for tape checks.
     private(set) var scanned: [ScannedElement] = []
+    /// The scanner's latest idea of the room being scanned, for the live model.
+    private(set) var liveRoom: CapturedRoom?
+    /// Grows each time the scanner's room changes, so the live model redraws only then.
+    private(set) var roomVersion = 0
+    /// Where the phone is, a few times a second, for the live model.
+    private(set) var cameraTransform: simd_float4x4?
+    /// How the room's scan is going, for the checklist and the progress ring.
+    private(set) var progress = ScanProgress.judge(.init(walls: [], floorFound: false, ceilingSeen: nil, photos: 0, hasScanner: true))
+    /// Looking for the place an earlier capture mapped, before a room can be added to.
+    private(set) var relocalizing = false
+    private(set) var roomStartedAt: Date?
+    var capturedID: String? { writer?.folder.lastPathComponent ?? lastCapture?.lastPathComponent }
+    var hasScanner: Bool { host.hasLiDAR }
+    var roomCount: Int { rooms.count }
 
     let host = ARHost()
     private let camera = CameraControl()
@@ -64,6 +78,9 @@ final class Recorder {
     private var waitingWrites = 0
     private var counter = 0
     private var lastMemoryWarning: Date?
+    private var lastPoseShown = 0.0
+    private var areas = MeshAreas()
+    private var areaTask: Task<Void, Never>?
     private let encode = DispatchQueue(label: "fullscale.capture.encode", qos: .userInitiated)
 
     static var capturesFolder: URL {
@@ -72,8 +89,10 @@ final class Recorder {
 
     // ---------- the capture ----------
 
-    /// Start the capture: a new folder, and the camera. A recorder makes one capture.
-    func startCapture() {
+    /// Start the capture: a new folder, and the camera. A recorder makes one capture. With an
+    /// earlier capture's map, the phone first finds that place again, so rooms added now line
+    /// up with what was scanned then.
+    func startCapture(space: Manifest.LibraryRef? = nil, continuing worldMap: ARWorldMap? = nil) {
         guard writer == nil, phase == .idle else { return }
         guard ARWorldTrackingConfiguration.isSupported else {
             problem = "This device can't follow its own movement in 3D, so it can't scan."
@@ -94,7 +113,8 @@ final class Recorder {
             videoFormat: .init(width: Int(format.imageResolution.width), height: Int(format.imageResolution.height), fps: format.framesPerSecond),
             highResolutionStills: format.isRecommendedForHighResolutionFrameCapturing
         )
-        manifest.alignment = .init(method: .first)
+        manifest.alignment = .init(method: worldMap == nil ? .first : .relocalized)
+        manifest.space = space
         do {
             writer = try BundleWriter(parent: Self.capturesFolder, manifest: manifest)
         } catch {
@@ -102,29 +122,78 @@ final class Recorder {
             return
         }
         host.onFrame = { [weak self] frame in self?.handle(frame) }
-        host.onRoomUpdate = { [weak self] room in self?.scanned = ScannedElement.list(room) }
+        host.onRoomUpdate = { [weak self] room in
+            guard let self else { return }
+            self.scanned = ScannedElement.list(room)
+            self.liveRoom = room
+            self.roomVersion += 1
+            self.updateProgress()
+        }
         host.onInstruction = { [weak self] asked in self?.instruction = asked }
         host.onFailure = { [weak self] reason in self?.problem = "The camera stopped: \(reason)" }
-        host.start()
+        relocalizing = worldMap != nil
+        host.start(worldMap: worldMap)
+        // How much ceiling has been seen changes slowly and takes a moment to add up.
+        areaTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, case .scanning = self.phase else { continue }
+                self.areas = await self.host.seenAreas()
+                self.updateProgress()
+            }
+        }
     }
 
-    func startRoom(named name: String) {
+    /// Give up finding the earlier capture's place and carry on in a fresh world; the computer
+    /// lines the scans up later instead.
+    func skipRelocalizing() {
+        guard relocalizing else { return }
+        relocalizing = false
+        host.restartWithoutMap()
+        save { $0.alignment = .init(method: .unaligned) }
+    }
+
+    func startRoom(named name: String, spaceRoom: Manifest.LibraryRef? = nil, addsTo: Manifest.AddsTo? = nil) {
         let id = "r\(rooms.count + 1)"
-        let entry = Manifest.Room(id: id, name: name.isEmpty ? "Room \(rooms.count + 1)" : name, dir: "rooms/\(id)", startedAt: Date())
+        let entry = Manifest.Room(id: id, name: name.isEmpty ? "Room \(rooms.count + 1)" : name, dir: "rooms/\(id)", startedAt: Date(), spaceRoom: spaceRoom, addsTo: addsTo)
         rooms.append(entry)
         roomRecord = RoomRecord(id: id, name: entry.name, startedAt: entry.startedAt)
         selector = PhotoSelector()
         scanned = []
+        liveRoom = nil
+        areas = MeshAreas()
+        roomStartedAt = Date()
         // Locked once tracking is good, when the camera has settled on the room's light.
         lockWhiteBalance = true
         whiteBalanceLost = false
         host.startRoom(index: UInt8(rooms.count - 1))
         phase = .scanning(room: entry.name)
+        updateProgress()
         save { $0.rooms.append(entry) }
     }
 
-    func finishRoom() async {
-        guard let writer, let entry = rooms.last else { return }
+    private func updateProgress() {
+        let walls = liveRoom.map(RoomShape.walls) ?? []
+        let floor = liveRoom.map(RoomShape.floor) ?? []
+        let floorArea = floor.count >= 3 ? RoomMeasure.summary(walls: walls, floor: floor, doors: 0, windows: 0, objects: 0, photos: 0).floorAreaM2 : nil
+        // The ceiling is about as big as the floor, so the share seen is ceiling area over
+        // floor area; the floor's own outline is the best measure of that, the mesh's next.
+        let reference = floorArea ?? (areas.floorM2 > 1 ? areas.floorM2 : nil)
+        let seen = ScanProgress.Seen(
+            walls: walls,
+            floorFound: !floor.isEmpty || areas.floorM2 > 1,
+            ceilingSeen: reference.map { areas.ceilingM2 / $0 },
+            photos: roomRecord?.counts.photos ?? 0,
+            hasScanner: host.hasLiDAR
+        )
+        let next = ScanProgress.judge(seen)
+        if next != progress { progress = next }
+    }
+
+    /// Finish the room being scanned; returns what was found, for the review screen.
+    @discardableResult
+    func finishRoom() async -> FinishedRoom? {
+        guard let writer, let entry = rooms.last else { return nil }
         phase = .finishingRoom
         for kept in selector.flush() { keep(kept) }
         let (data, scannerProblem, mesh) = await host.finishRoom()
@@ -140,6 +209,7 @@ final class Recorder {
         // unreadable instead of failing the room.
         encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
         // Each part is saved on its own, so one that fails doesn't lose the others.
+        var layout: CapturedRoom?
         if let data {
             // The raw data first: it can be turned into a room layout again later even if
             // building the layout now fails.
@@ -149,8 +219,9 @@ final class Recorder {
                 try await writer.write(try encoder.encode(data), at: "\(entry.dir)/roomplan-data.json")
             }
             await saveRoomPart("the room layout", of: entry) {
-                let layout = try await RoomBuilder(options: [.beautifyObjects]).capturedRoom(from: data)
-                try await writer.write(try encoder.encode(layout), at: "\(entry.dir)/roomplan.json")
+                let built = try await RoomBuilder(options: [.beautifyObjects]).capturedRoom(from: data)
+                layout = built
+                try await writer.write(try encoder.encode(built), at: "\(entry.dir)/roomplan.json")
             }
         }
         await saveRoomPart("the 3D mesh", of: entry) {
@@ -166,7 +237,17 @@ final class Recorder {
             if let i = manifest.rooms.firstIndex(where: { $0.id == entry.id }) { manifest.rooms[i].endedAt = ended }
         }
         flushPoses()
+        // The map so far, so this room can be scanned more later from where it was left.
+        await saveWorldMap()
+        let shown = layout ?? liveRoom
+        let summary = RoomShape.summary(shown, photos: roomRecord?.counts.photos ?? 0)
         phase = .checking(room: entry.id)
+        return FinishedRoom(capture: writer.folder.lastPathComponent, room: entry.id, name: entry.name, summary: summary, layout: shown)
+    }
+
+    private func saveWorldMap() async {
+        guard host.hasLiDAR, let data = await host.worldMapData() else { return }
+        store("the map of the place") { try await $0.write(data, at: "worldmap.arworldmap") }
     }
 
     /// A tape check for the room just scanned. Returns how it compares with the scan.
@@ -220,6 +301,7 @@ final class Recorder {
     }
 
     func endCapture() async {
+        areaTask?.cancel()
         host.stop()
         camera.unlock()
         // Let depth frames and stills still being encoded reach the writer first.
@@ -268,6 +350,12 @@ final class Recorder {
         }
         // Set only on change: each set redraws the screen, and this runs 60 times a second.
         if trackingGood != tracking.open { trackingGood = tracking.open }
+        // Found the earlier capture's place: rooms can be added now.
+        if relocalizing, state == .normal, reason == nil { relocalizing = false }
+        if t - lastPoseShown >= 0.1 {
+            lastPoseShown = t
+            cameraTransform = frame.camera.transform
+        }
         let message = TrackingAdvice.message(tracking: state, reason: reason, gateOpen: tracking.open, instruction: scanningRoom == nil ? nil : instruction)
         if advice != message { advice = message }
         checkThermal()
@@ -315,13 +403,20 @@ final class Recorder {
     private func keep(_ photo: PhotoCandidate) {
         guard let held = heldImage, held.id == photo.id else { return }
         heldImage = nil
-        photos += 1
-        roomRecord?.counts.photos += 1
-        store("a photo") { writer in
+        guard held.frame.isUsable else {
+            log(.stillFailed, room: held.frame.room, detail: "photo \(held.id) had a number the camera couldn't measure, so it was left out")
+            return
+        }
+        store("a photo", { writer in
             try await writer.write(held.jpeg, at: held.frame.file)
             try await writer.append(held.frame, to: "photos/index.jsonl")
-        }
-        save { $0.counts.photos += 1 }
+            try await writer.updateManifest { $0.counts.photos += 1 }
+        }, saved: { [weak self] in
+            guard let self else { return }
+            self.photos += 1
+            self.roomRecord?.counts.photos += 1
+            self.updateProgress()
+        })
     }
 
     // ---------- white balance and grey cards ----------
@@ -357,17 +452,22 @@ final class Recorder {
         let size = frame.camera.imageResolution
         let photo = PhotoRecord(id: id, file: "photos/\(id).jpg", room: room.id, kind: .card, t: frame.timestamp, width: Int(size.width), height: Int(size.height), pose: pose, intrinsics: FrameData.intrinsics(frame.camera.intrinsics), tracking: .normal, blurPx: 0, camera: cameraRecord(frame.camera, exif: frame.exifData))
         let card = ColourCardRecord(id: id, room: room.id, card: "grey-18", photo: photo.file, whiteBalanceGains: reading.gains, temperatureK: reading.temperatureK, tint: reading.tint, iso: reading.iso, exposureS: frame.camera.exposureDuration, evOffset: Double(frame.camera.exposureOffset))
-        cards += 1
-        roomRecord?.counts.cards += 1
-        store("the grey card photo") { writer in
+        guard photo.isUsable else {
+            problem = "The grey card photo could not be taken. Try again."
+            return
+        }
+        store("the grey card photo", { writer in
             try await writer.write(jpeg, at: photo.file)
             try await writer.append(photo, to: "photos/index.jsonl")
             try await writer.append(card, to: "colour/cards.jsonl")
-        }
-        save {
-            $0.counts.photos += 1
-            $0.counts.cards += 1
-        }
+            try await writer.updateManifest {
+                $0.counts.photos += 1
+                $0.counts.cards += 1
+            }
+        }, saved: { [weak self] in
+            self?.cards += 1
+            self?.roomRecord?.counts.cards += 1
+        })
     }
 
     // ---------- full-resolution stills ----------
@@ -399,6 +499,10 @@ final class Recorder {
             pose: still.pose, intrinsics: still.intrinsics, tracking: .normal, blurPx: blur,
             camera: .init(exposureS: still.exposureS, iso: reading?.iso ?? 0, evOffset: still.evOffset, whiteBalanceGains: reading?.gains ?? [], whiteBalanceLocked: reading?.whiteBalanceLocked ?? false, exposureLocked: reading?.exposureLocked ?? false)
         )
+        guard record.isUsable else {
+            log(.stillFailed, room: room.id, detail: "the camera gave a still with a number it couldn't measure, so it was left out")
+            return
+        }
         waitingWrites += 1
         encode.async { [weak self] in
             let jpeg = FrameData.jpeg(still.image, quality: 0.92)
@@ -409,13 +513,14 @@ final class Recorder {
                     self.log(.stillFailed, room: room.id, detail: "the still could not be encoded")
                     return
                 }
-                self.stills += 1
-                self.roomRecord?.counts.stills += 1
-                self.store("a full-resolution photo") { writer in
+                self.store("a full-resolution photo", { writer in
                     try await writer.write(jpeg, at: record.file)
                     try await writer.append(record, to: "photos/index.jsonl")
-                }
-                self.save { $0.counts.photos += 1 }
+                    try await writer.updateManifest { $0.counts.photos += 1 }
+                }, saved: { [weak self] in
+                    self?.stills += 1
+                    self?.roomRecord?.counts.stills += 1
+                })
             }
         }
     }
@@ -450,15 +555,20 @@ final class Recorder {
                     confidence: .init(file: "frames/\(id).conf"),
                     rgb: .init(file: "frames/\(id).jpg", width: 640, height: Int(640 * rgbSize.height / rgbSize.width), intrinsics: rgbK)
                 )
-                self.keyframes += 1
-                self.roomRecord?.counts.keyframes += 1
-                self.store("a depth frame") { writer in
+                guard record.isUsable else {
+                    self.save { $0.counts.depthSkipped.writeFailed += 1 }
+                    return
+                }
+                self.store("a depth frame", { writer in
                     try await writer.write(depthData, at: record.depth.file)
                     try await writer.write(confidenceData, at: record.confidence.file)
                     try await writer.write(colour, at: record.rgb.file)
                     try await writer.append(record, to: "frames/index.jsonl")
-                }
-                self.save { $0.counts.keyframes += 1 }
+                    try await writer.updateManifest { $0.counts.keyframes += 1 }
+                }, saved: { [weak self] in
+                    self?.keyframes += 1
+                    self?.roomRecord?.counts.keyframes += 1
+                })
             }
         }
     }
@@ -472,6 +582,8 @@ final class Recorder {
     }
 
     private func record(pose: Pose, t: Double, tracking: Tracking) {
+        // One unwritable pose would cost the whole batch of 60.
+        guard pose.isFinite, t.isFinite else { return }
         poses.append(PoseRecord(t: t, pose: pose, tracking: tracking))
         if poses.count >= 60 { flushPoses() }
     }
@@ -506,18 +618,21 @@ final class Recorder {
 
     /// Run a write in order after the ones before it. A failure is shown and logged, never
     /// lost: the capture goes on, and the person knows something is missing.
-    private func store(_ what: String, _ work: @escaping @Sendable (BundleWriter) async throws -> Void) {
+    /// `saved` runs only once the work has succeeded, so counts never include what failed.
+    private func store(_ what: String, _ work: @escaping @Sendable (BundleWriter) async throws -> Void, saved: (() -> Void)? = nil) {
         guard let writer else { return }
         let previous = lastWrite
         lastWrite = Task {
             await previous?.value
             do {
                 try await work(writer)
+                saved?()
             } catch {
-                self.problem = "Could not save \(what): \(error.localizedDescription)"
+                let reason = Self.describe(error)
+                self.problem = "Could not save \(what): \(reason)"
                 // Logged directly, not through store(), so a log that can't be written can't
                 // loop; if this fails too, the message on screen is the record.
-                try? await writer.append(EventRecord(t: ProcessInfo.processInfo.systemUptime, kind: .writeFailed, detail: "\(what): \(error.localizedDescription)"), to: "log/events.jsonl")
+                try? await writer.append(EventRecord(t: ProcessInfo.processInfo.systemUptime, kind: .writeFailed, detail: "\(what): \(reason)"), to: "log/events.jsonl")
             }
         }
     }
@@ -562,6 +677,16 @@ final class Recorder {
 }
 
 extension Recorder: Identifiable {}
+
+/// A room just scanned: where it is saved and what was found.
+struct FinishedRoom: Identifiable {
+    let capture: String
+    let room: String
+    let name: String
+    let summary: RoomSummary
+    let layout: CapturedRoom?
+    var id: String { "\(capture)/\(room)" }
+}
 
 /// Something the scanner found that a tape can check: a wall's length, a door's or window's
 /// width, with the scanner's identifier so the computer can match the check to the element.

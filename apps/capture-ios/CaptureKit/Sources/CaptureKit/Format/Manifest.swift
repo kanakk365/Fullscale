@@ -6,7 +6,7 @@ import Foundation
 public struct Manifest: Codable, Sendable, Equatable {
     public static let currentFormat = "fullscale-capture/1"
     /// Grows when fields are added; readers ignore fields they don't know.
-    public static let currentRevision = 1
+    public static let currentRevision = 2
 
     public enum Status: String, Codable, Sendable { case recording, complete, interrupted }
 
@@ -70,6 +70,27 @@ public struct Manifest: Codable, Sendable, Equatable {
         }
     }
 
+    /// A space or a room in the phone's library ("Home", "Bedroom"), so the computer knows
+    /// which room of which space a scan is of.
+    public struct LibraryRef: Codable, Sendable, Equatable {
+        public var id: String
+        public var name: String
+        public init(id: String, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    /// The earlier scan a room's scan adds to: that capture and its room.
+    public struct AddsTo: Codable, Sendable, Equatable {
+        public var capture: String
+        public var room: String
+        public init(capture: String, room: String) {
+            self.capture = capture
+            self.room = room
+        }
+    }
+
     public struct Room: Codable, Sendable, Equatable {
         public var id: String
         public var name: String
@@ -77,12 +98,18 @@ public struct Manifest: Codable, Sendable, Equatable {
         public var dir: String
         public var startedAt: Date
         public var endedAt: Date?
-        public init(id: String, name: String, dir: String, startedAt: Date, endedAt: Date? = nil) {
+        /// The library room this is a scan of.
+        public var spaceRoom: LibraryRef?
+        /// Set when this scan adds to an earlier one of the same room, lined up with it.
+        public var addsTo: AddsTo?
+        public init(id: String, name: String, dir: String, startedAt: Date, endedAt: Date? = nil, spaceRoom: LibraryRef? = nil, addsTo: AddsTo? = nil) {
             self.id = id
             self.name = name
             self.dir = dir
             self.startedAt = startedAt
             self.endedAt = endedAt
+            self.spaceRoom = spaceRoom
+            self.addsTo = addsTo
         }
     }
 
@@ -126,6 +153,8 @@ public struct Manifest: Codable, Sendable, Equatable {
     /// 1 LiDAR + scanner, 2 camera only, 3 Android ARCore, 4 photos only.
     public var tier: Int?
     public var ar: AR?
+    /// The library space the capture's rooms belong to.
+    public var space: LibraryRef?
     public var rooms: [Room] = []
     public var counts = Counts()
     public var alignment: Alignment?

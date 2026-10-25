@@ -66,3 +66,24 @@ struct FormatTests {
         #expect(CaptureNaming.isSafe(path) == safe)
     }
 }
+
+@Suite("Records that can't be written")
+struct UsableRecordTests {
+    func photo(pose: [Double] = Array(repeating: 0, count: 16), blur: Double = 1, fx: Double = 1400) -> PhotoRecord {
+        PhotoRecord(
+            id: "s1", file: "photos/s1.jpg", room: "r1", kind: .still, t: 10, width: 4032, height: 3024,
+            pose: Pose(pose), intrinsics: Intrinsics(fx: fx, fy: fx, cx: 2016, cy: 1512), tracking: .normal, blurPx: blur,
+            camera: .init(exposureS: 0.01, iso: 800, evOffset: 0, whiteBalanceGains: [2, 1, 1.6], whiteBalanceLocked: true, exposureLocked: false)
+        )
+    }
+
+    @Test("a photo with a number JSON can't hold is not usable")
+    func notFinite() {
+        #expect(photo().isUsable)
+        var pose = Array(repeating: 0.0, count: 16)
+        pose[12] = .nan
+        #expect(!photo(pose: pose).isUsable)
+        #expect(!photo(blur: .infinity).isUsable)
+        #expect(!photo(fx: 0).isUsable)
+    }
+}

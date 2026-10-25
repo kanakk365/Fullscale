@@ -290,3 +290,30 @@ public struct EventRecord: Codable, Sendable, Equatable {
         self.value = value
     }
 }
+
+// ---------- usable records ----------
+
+// JSON has no numbers for NaN or infinity, and a record holding one can't be written. The
+// camera can hand one over (seen once on a full-resolution still just after tracking
+// started), so records are checked before writing, and one that fails is left out and logged.
+
+extension Pose {
+    public var isFinite: Bool { m.allSatisfy(\.isFinite) }
+}
+
+extension Intrinsics {
+    public var isUsable: Bool { [fx, fy, cx, cy].allSatisfy(\.isFinite) && fx > 0 && fy > 0 }
+}
+
+extension PhotoRecord {
+    /// Every number can be written and makes sense: a photo the computer can place.
+    public var isUsable: Bool {
+        pose.isFinite && intrinsics.isUsable && t.isFinite && blurPx.isFinite
+            && [camera.exposureS, camera.iso, camera.evOffset].allSatisfy(\.isFinite)
+            && camera.whiteBalanceGains.allSatisfy(\.isFinite)
+    }
+}
+
+extension KeyframeRecord {
+    public var isUsable: Bool { pose.isFinite && t.isFinite && depth.intrinsics.isUsable && rgb.intrinsics.isUsable }
+}
