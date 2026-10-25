@@ -10,7 +10,7 @@ The importer (`packages/capture`) turns a capture into an editable home where ev
 - **World frame:** the AR session's world: right-handed, **+Y up** (against gravity). This is the home's frame too: a world point `(x, y, z)` is plan point `[x, z]`.
 - **Poses:** camera-to-world 4 × 4 matrices as **16 numbers in column-major order** (translation in elements 12–14), which is what `Matrix4.fromArray` in Three.js and `simd_float4x4` columns give.
 - **Camera axes:** +x right, +y up, −z forward, in the sensor's orientation.
-- **Intrinsics:** named fields `{ fx, fy, cx, cy }` in pixels of the image they belong to. Never a bare 3 × 3 (row/column order mix-ups are a classic bug). Every image has its own, because focus changes `fx`.
+- **Intrinsics:** named fields `{ fx, fy, cx, cy }` in pixels of the image they belong to. Never a bare 3 × 3 (row/column order mix-ups are a classic bug). Every image has its own, because focus changes `fx`. Pixel coordinates start at the top-left **corner** of the top-left pixel, so pixel centres are at half pixels (`i + 0.5`); intrinsics for a resized image are the same numbers times the scale. Half a pixel moves a surface several millimetres at room distances, so readers must use this convention too.
 - **Images:** saved in sensor orientation with EXIF orientation 1. Readers ignore EXIF orientation.
 - **Times:** `t` is seconds since the device booted (ARKit time). The manifest's `clock` pairs it with UTC.
 - **Paths:** relative to the capture folder, `/`-separated, never containing `..`, never absolute.
@@ -39,6 +39,9 @@ The importer (`packages/capture`) turns a capture into an editable home where ev
   log/events.jsonl                  events (tracking lost, thermal state, memory warnings…)
   log/diagnostics.json              counts of every outcome (photos kept, depth frames skipped and why…)
   worldmap.arworldmap               optional, to continue the capture later
+  built/                            made on the computer by the room builder, never by the phone:
+  built/room.glb                      the detailed, coloured model, in this capture's world frame
+  built/build.json                    what was built, from what, and with which settings
 ```
 
 Only `manifest.json` is required. Everything else is optional, so a phone without LiDAR (no mesh, no depth) or a capture cut short still opens.
@@ -97,7 +100,7 @@ Binary little-endian PLY in world metres. Vertex properties: `x y z nx ny nz` (f
 
 ## The scanner's room layout (`roomplan.json`)
 
-Apple's `CapturedRoom` encoded as JSON, unchanged. What the importer reads:
+Apple's `CapturedRoom` encoded as JSON, unchanged, except that numbers JSON can't hold (NaN and infinity, which the scanner sometimes produces) are written as the strings `"nan"`, `"inf"` and `"-inf"`. `roomplan-data.json` is written the same way, so decode both with the matching setting. The importer reports an element such a value makes unreadable and reads the rest. Each of `roomplan-data.json`, `roomplan.json` and `mesh/session.ply` is saved on its own: a room may have some without the others, and the event log says why one is missing. `roomplan-data.json` is often missing: on iOS 27 Apple's own encoder for it fails with "Invalid data". It is only a backup; the importer doesn't need it. What the importer reads:
 - `walls`, `doors`, `windows`, `openings`, `floors`, `objects`: arrays of elements, each with `identifier`, `category` (an object with one key, e.g. `{"door": {"isOpen": true}}`), `confidence` (one key: `high`, `medium` or `low`), `dimensions` `[width, height, depth]` (depth 0 for walls, doors and windows), and `transform` (16 numbers, column-major).
 - Doors, windows and openings name their wall in `parentIdentifier`.
 - Floors may list `polygonCorners` (in the floor's own frame).

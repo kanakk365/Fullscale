@@ -21,6 +21,7 @@ Each pick says what we use and why. All code in this repo is our own. Items mark
 | Assets | CC0 only in the repo, plus procedural furniture; an `ASSETS.json` ledger checked in CI | CC0 | Safe to redistribute |
 | Your own models | People put their own `.glb`/`.gltf` files (e.g. IKEA downloads) in `data/models/` (git-ignored). Items store only the path, marked `local-only`, with the size typed from the product page (`source: maker`); the model is fitted to that size, with a warning if its shape doesn't match | owner's terms | Real products at real sizes without the repo ever containing them |
 | Python | Python 3.12 via `uv` for the scan pipeline (system 3.9 is too old for Open3D and msplat); the Blender add-on's tests run on 3.9+ | – | – |
+| Scan → detailed model | The room builder merges depth frames in Open3D's sparse voxel grid (`VoxelBlockGrid`, 1 cm, blocks of 8 voxels: half the memory of 16 for the same result), then colours points from the photos with NumPy. Open3D 0.20's older `ScalableTSDFVolume` returned an empty surface on macOS, so it isn't used. Points carry colour for now; textures come later | Open3D: MIT; NumPy, Pillow: BSD-style | Uses every depth frame and photo the phone kept; tested against made-up rooms with known answers |
 | Lint and format | Biome, one config for all TypeScript | MIT / Apache | One fast tool for both; matches the code's existing style |
 
 ## Avoid

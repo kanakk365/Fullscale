@@ -52,9 +52,11 @@ Stack choices are in `docs/DECISIONS.md`.
 
 ### Phase 3: your existing home from a scan (started)
 - [x] The `fullscale-capture/1` format (`docs/capture-format.md`) and an importer: scanned rooms become walls (room-side face exact, thickness a marked guess unless both sides were scanned), doors, windows, furniture and rooms, each with a scanned source and ±; tape checks compared and offered as fixes. Tested on synthetic scans.
-- [ ] Python 3.12 pipeline (uv + Open3D): fit LiDAR planes to tighten walls, floor and ceiling; find openings; join rooms.
+- [x] **Room builder** (`room-builder/`, Python 3.12, uv + Open3D, first version 2026-10-26): every depth frame merged into one surface, cut to the scanned rooms, coloured from the photos (visibility-checked, best views first, exposure evened out); written as `built/room.glb` with a report. The editor's 3D view shows it (**Scan** switch), placed by the capture's `toHome`. Tested on made-up rooms against the true shape and colours; run on the first real scans.
+- [ ] Room builder, next: flat walls, floor and ceiling at the scanned positions (keeping their colours); furniture and objects cut out as separate, movable pieces; colour at photo resolution (textures) instead of per point; a lighter file for big homes.
+- [ ] Fit LiDAR planes to tighten the imported walls, floor and ceiling; find openings; join rooms.
 - [ ] Accuracy report across held-out tape checks.
-- [ ] Colours from photos, with grey-card calibration.
+- [ ] Grey-card calibration of the photo colours (the room builder already colours from photos, with white balance locked per room).
 - [ ] Matched-camera comparison: render the model from a photo's camera next to the photo.
 
 ### Phase 4: capture on every phone (started)

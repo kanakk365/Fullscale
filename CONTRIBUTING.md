@@ -6,11 +6,11 @@ Thank you for helping. This guide says how the code is laid out, how to check yo
 
 ```sh
 npm install
-npm run check       # lint, types, TypeScript tests, Blender add-on tests
+npm run check       # lint, types, TypeScript tests, Blender add-on and room builder tests
 npm run test:ios    # CaptureKit (Swift 6), on a Mac
 ```
 
-Run `npm run format` before committing. The browser tests run when a Chromium is installed (`npx playwright-core install chromium-headless-shell`); without one they are skipped.
+The room builder's tests need [uv](https://docs.astral.sh/uv/), which fetches Python 3.12 and Open3D the first time; on macOS, also `brew install libusb`. Run `npm run format` before committing. The browser tests run when a Chromium is installed (`npx playwright-core install chromium-headless-shell`); without one they are skipped.
 
 ## How the code is laid out
 

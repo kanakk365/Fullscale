@@ -4,7 +4,7 @@ Capture, design and edit spaces in 3D at **real size**, together with an AI agen
 
 Scan a room with your phone, or start from a floor plan or a blank page, then redesign it: draw walls, add doors and windows, place furniture, change colours. Every dimension says where it came from and how sure it is ("3.42 m ±1 cm, scanned"), and stays honest as you edit. An AI agent edits the same space through MCP, live, next to you, and Blender opens it for photo-real pictures.
 
-> **Status: early.** The studio, the editor, the agent tools, the scan importer and the Blender link work and are tested. The iPhone app builds; it has not yet been tried on a phone. See [the plan](docs/PLAN.md).
+> **Status: early.** The studio, the editor, the agent tools, the scan importer, the room builder and the Blender link work and are tested. The iPhone app runs on a phone and has made its first real scans. See [the plan](docs/PLAN.md).
 
 ![The editor: plan and 3D side by side](docs/images/editor.png)
 
@@ -16,8 +16,9 @@ Scan a room with your phone, or start from a floor plan or a blank page, then re
 - **AI agents, through MCP** (`apps/server`): 40 tools to look (plan pictures with scale, 3D views, photo-real renders), measure (with ±), check "will it fit?" (saying what was and wasn't checked), build, furnish and paint. Every edit answers with what really changed; refusals say why and what would work. Agents undo only their own edits, and see what you changed and selected.
 - **Phone scans** (`packages/capture`): the `fullscale-capture/1` format and an importer that turns a scan into walls, doors, windows, rooms and furniture, squared to the plan, and compares your tape checks with it.
 - **Floor plan pictures**: lay one under a level and scale it from lengths you know; two lengths that disagree by over 2% are refused (the plan may not be to scale).
+- **Room builder** (`room-builder/`, Python): turns a scan into a detailed 3D model with the photos' colours and everything in the room, small things too. The editor's 3D view shows it next to the editable model.
 - **Blender** (`blender/`): an add-on that opens your home as real objects and keeps it in step both ways, and the script behind photo-real renders.
-- **iPhone capture** (`apps/capture-ios`): scans rooms with LiDAR and Apple's room scanner, keeps sharp photos (and full-resolution ones) with one white balance per room, takes grey-card photos and tape checks, and writes a crash-safe capture folder. Its rules are tested on the Mac; the app builds in Xcode.
+- **iPhone capture** (`apps/capture-ios`): scans rooms with LiDAR and Apple's room scanner, keeps sharp photos (and full-resolution ones) with one white balance per room, takes grey-card photos and tape checks, and writes a crash-safe capture folder. Its rules are tested on the Mac, and it runs on an iPhone.
 - **Your own furniture models**: put downloaded `.glb`/`.gltf` files in `data/models/`; items use them at their true size. They never leave your computer and are never exported.
 
 ## Try it
@@ -40,6 +41,12 @@ Apps that connect over HTTP can use `http://127.0.0.1:4747/mcp` with the token f
 
 Your homes are saved in `data/homes/` (git-ignored). `npm run studio -- --home <folder>` opens another one.
 
+### From a phone scan
+
+1. Copy the capture folder from the phone into your home's folder, e.g. `data/homes/my-home/captures/<capture-id>/` (AirDrop the shared zip and unzip it, or see [the iPhone app's notes](apps/capture-ios/README.md) for copying straight off a connected phone).
+2. Ask your agent to import it (the `import_capture` tool). The walls, doors, windows and furniture appear in the editor, each marked as scanned with its ±.
+3. Build the detailed model: `npm run room-builder -- build data/homes/my-home/captures/<capture-id>` (needs [uv](https://docs.astral.sh/uv/); on macOS also `brew install libusb`). Then switch the editor's 3D view from **Model** to **Scan**.
+
 ## Develop
 
 ```sh
@@ -48,6 +55,7 @@ npm run dev           # the editor with live reload, at http://127.0.0.1:5173/#t
 npm test              # TypeScript tests (the browser tests run when a Chromium is installed: npx playwright-core install chromium-headless-shell)
 npm run test:blender  # the Blender add-on's tests (Python 3.9+)
 npm run test:ios      # CaptureKit's tests (Swift 6)
+npm run test:room-builder  # the room builder's tests (uv; on macOS also brew install libusb)
 npm run check         # lint, types and tests
 ```
 
@@ -60,6 +68,7 @@ npm run check         # lint, types and tests
 | `apps/server` | The studio: owns the home, serves the editor, Blender and agents (MCP) |
 | `apps/editor` | The editor |
 | `apps/capture-ios` | The iPhone capture app |
+| `room-builder/` | Turns a scan into a detailed, coloured 3D model (Python, Open3D) |
 | `blender/` | The Blender add-on and render script (GPL) |
 | `fixtures/` | Test cases shared by TypeScript, Swift and (later) Kotlin |
 | `docs/` | The plan, decisions and the capture format |
