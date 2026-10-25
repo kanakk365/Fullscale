@@ -10,15 +10,17 @@
     "studio": "tsx apps/server/src/cli.ts serve",
     "studio:dev": "tsx apps/server/src/cli.ts serve --allow-origin http://127.0.0.1:5173",
     "mcp": "tsx apps/server/src/cli.ts mcp",
+    "room-builder": "uv run --project room-builder room-builder",
     "dev": "npm run dev -w @fullscale/editor",
     "build": "npm run build -w @fullscale/editor",
     "test": "vitest run",
     "test:blender": "cd blender && python3 -m unittest discover -s tests -t .",
     "test:ios": "cd apps/capture-ios/CaptureKit && swift test",
+    "test:room-builder": "cd room-builder && uv run python -m unittest discover -s tests -t .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check",
     "format": "biome format --write",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:blender"
+    "check": "npm run lint && npm run typecheck && npm test && npm run test:blender && npm run test:room-builder"
   },
   "engines": {
     "node": ">=22.12"
