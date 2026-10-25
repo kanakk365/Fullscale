@@ -30,10 +30,15 @@ export interface RenderResult {
   rev: number;
 }
 
-/** Blender's program: BLENDER_BIN, the usual Mac place, or `blender` on the PATH. */
+/**
+ * Blender's program: BLENDER_BIN when set (and then only that, so a wrong path is reported
+ * rather than quietly replaced by another Blender), else the usual Mac place or `blender` on
+ * the PATH.
+ */
 export function findBlender(env: NodeJS.ProcessEnv = process.env): string | null {
-  const candidates = [env.BLENDER_BIN, '/Applications/Blender.app/Contents/MacOS/Blender', ...(env.PATH ?? '').split(delimiter).map((dir) => join(dir, 'blender'))];
-  return candidates.find((c): c is string => !!c && existsSync(c)) ?? null;
+  if (env.BLENDER_BIN) return existsSync(env.BLENDER_BIN) ? env.BLENDER_BIN : null;
+  const candidates = ['/Applications/Blender.app/Contents/MacOS/Blender', ...(env.PATH ?? '').split(delimiter).map((dir) => join(dir, 'blender'))];
+  return candidates.find((c) => existsSync(c)) ?? null;
 }
 
 /** What a render would do, without doing it. */

@@ -250,10 +250,11 @@ describe('photo-real pictures', () => {
     expect(r.images).toHaveLength(1);
   });
 
-  it('says how to get Blender when it is missing', async () => {
+  it('says how to get Blender when it is missing, even if another Blender is installed', async () => {
     process.env.BLENDER_BIN = join(dir, 'no-such-blender');
     const r = await call('render_photoreal', { preset: 'thumb' });
-    // Only meaningful where Blender isn't installed in the usual places.
-    if (r.isError) expect(refusal(r)).toMatchObject({ code: 'blender_unavailable' });
+    expect(r.isError).toBe(true);
+    expect(refusal(r)).toMatchObject({ code: 'blender_unavailable' });
+    expect(r.text).toMatch(/BLENDER_BIN is set to/);
   });
 });

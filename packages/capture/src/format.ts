@@ -13,6 +13,9 @@ const RelativePath = z
   .max(300)
   .refine((p) => !p.startsWith('/') && !p.split('/').some((part) => part === '..' || part === ''), 'paths are relative and never contain ".."');
 
+/** A space or room in the phone's library ("Home", "Bedroom"). */
+const LibraryRefSchema = z.object({ id: z.string().min(1).max(64), name: z.string().max(80) });
+
 export const CaptureRoomSchema = z.object({
   id: z.string().min(1).max(64),
   name: z.string().max(80).default('Room'),
@@ -20,6 +23,10 @@ export const CaptureRoomSchema = z.object({
   dir: RelativePath,
   startedAt: z.string().optional(),
   endedAt: z.string().optional(),
+  /** the library room this is a scan of (revision 2) */
+  spaceRoom: LibraryRefSchema.optional(),
+  /** the earlier scan of the same room this one adds to: that capture and its room (revision 2) */
+  addsTo: z.object({ capture: z.string().min(1).max(64), room: z.string().min(1).max(64) }).optional(),
 });
 
 export const ManifestSchema = z.object({
@@ -34,6 +41,8 @@ export const ManifestSchema = z.object({
   device: z.object({ model: z.string(), os: z.string(), osVersion: z.string(), lidar: z.boolean() }).optional(),
   /** 1 LiDAR + scanner, 2 camera only, 3 Android ARCore, 4 photos only */
   tier: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
+  /** the library space the capture's rooms belong to (revision 2) */
+  space: LibraryRefSchema.optional(),
   rooms: z.array(CaptureRoomSchema).default([]),
   alignment: z.object({ method: z.enum(['first', 'relocalized', 'unaligned']), residualM: finite().optional() }).optional(),
 });

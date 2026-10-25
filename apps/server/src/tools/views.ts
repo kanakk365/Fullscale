@@ -154,9 +154,12 @@ export const renderPhoto = defineTool({
       return { text, data: { ...f, blender: blender ?? null, rev: ctx.studio.rev } };
     }
     if (!blender) {
+      const set = process.env.BLENDER_BIN;
       throw new EditError(
         'blender_unavailable',
-        'Blender is not installed on this computer. Install it (free) from blender.org, or set BLENDER_BIN to its program, then try again. view_3d gives a quick 3D picture meanwhile.',
+        set
+          ? `BLENDER_BIN is set to "${set}", but there is no program there. Fix the path, or unset it to use the Blender installed in the usual place. view_3d gives a quick 3D picture meanwhile.`
+          : 'Blender is not installed on this computer. Install it (free) from blender.org, or set BLENDER_BIN to its program, then try again. view_3d gives a quick 3D picture meanwhile.',
       );
     }
     const rev = ctx.studio.rev;
