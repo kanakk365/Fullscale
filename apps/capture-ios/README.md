@@ -42,7 +42,19 @@ The Xcode project is generated from `project.yml` and not kept in git. Change `p
 4. Pick the phone at the top of the Xcode window and press **Run** (⌘R).
 5. The first time, the phone refuses to open the app: **Settings → General → VPN & Device Management** → your Apple ID → **Trust**.
 
+If the phone says it can't verify the app, it needs the internet once to check with Apple: turn off any VPN, Private Relay or ad blocker, or restart the phone, and tap **Verify App** again.
+
 Captures appear in the app and in the Files app (On My iPhone → Fullscale → Captures). Share one as a zip (AirDrop to the Mac), unzip it inside your home's folder, and import it with the `import_capture` agent tool.
+
+From the command line, with the phone connected and its team chosen once in Xcode (`xcrun devicectl list devices` gives the phone's id). Real captures go in `data/captures-in/`, which git ignores:
+
+```sh
+xcodebuild -project FullscaleCapture.xcodeproj -scheme FullscaleCapture -destination 'id=<phone id>' \
+  -derivedDataPath /tmp/fullscale-dd -allowProvisioningUpdates build
+xcrun devicectl device install app --device <phone id> /tmp/fullscale-dd/Build/Products/Debug-iphoneos/FullscaleCapture.app
+xcrun devicectl device copy from --device <phone id> --domain-type appDataContainer --domain-identifier org.fullscale.capture \
+  --source Documents/Captures/<capture id> --destination ../../../data/captures-in/<capture id>
+```
 
 ### A first real scan
 
@@ -50,11 +62,16 @@ Pick a simple room. Scan it slowly along the walls, then the floor and ceiling. 
 
 ## Not verified yet
 
-The app builds, and its first screen opens in the simulator. Nothing that needs the camera has run yet. Check these on the first scans:
+The app runs on an iPhone 18 Pro (iOS 27.0.1). Two one-room scans so far:
+- Tracking, the white-balance lock, photos and depth keyframes work.
+- The first scan lost its room layout and mesh: one failed save took the others with it. Each part is now saved on its own, and the second scan kept its layout (4 walls, a door, a window, the floor, 4 objects) and its mesh (114,000 points).
+- The scanner's raw data (`roomplan-data.json`, a backup) doesn't save: Apple's own encoder fails with "Invalid data". It is logged, not shown.
+- Stills were blocked on the first scan because the phone reaches "fair" heat within seconds; they now stop only at "serious". The second scan kept 28, but only 2016 × 1512: the session runs a 1920 × 1440 video format that isn't recommended for high-resolution capture. Trying the recommended format is next; check it doesn't upset RoomPlan or heat the phone.
 
-- **Keeping depth and the mesh while RoomPlan runs** (`ARHost.restoreDepthAndMesh`): RoomPlan reconfigures the session without them. Re-applying the configuration every half second is the intended fix; check that mesh anchors and `sceneDepth` keep arriving.
+Still to check:
+
+- **Keeping the mesh while RoomPlan runs** (`ARHost.restoreDepthAndMesh`): RoomPlan reconfigures the session without depth or the mesh, and the configuration is re-applied every half second. Depth kept arriving on the first scan (no gap over 1.6 s); the mesh is still to check.
 - **Copying the mesh before a room stops**, and RoomPlan's `stop(pauseARSession: false)` keeping the world for the next room.
 - **White balance:** locked per room through the camera ARKit uses. Check that it stays locked while RoomPlan reconfigures the session; the app puts the lock back, and logs `white_balance_failed` in `log/events.jsonl` if it can't.
-- **Full-resolution stills:** their size depends on the video format RoomPlan picks (recorded in the manifest's `ar`). Check their size and how often they are kept.
 - **Speed:** photos are JPEG-encoded on the main thread when a frame becomes the held candidate. If the camera stutters, move this to the encoding queue.
 - **Accuracy:** the ±2/4/8 cm per scanner confidence are estimates until tape checks measure them.

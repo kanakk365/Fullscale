@@ -49,9 +49,9 @@ struct PolicyTests {
     @Test("rations full-resolution stills and keeps only matching ones")
     func stills() {
         let policy = StillPolicy()
-        #expect(policy.mayRequest(now: 10, lastStill: 8, thermalNominal: true, enabled: true) == false)
-        #expect(policy.mayRequest(now: 11.5, lastStill: 8, thermalNominal: true, enabled: true))
-        #expect(policy.mayRequest(now: 20, lastStill: nil, thermalNominal: false, enabled: true) == false)
+        #expect(policy.mayRequest(now: 10, lastStill: 8, enabled: true) == false)
+        #expect(policy.mayRequest(now: 11.5, lastStill: 8, enabled: true))
+        #expect(policy.mayRequest(now: 20, lastStill: nil, enabled: false) == false)
         let held = PhotoCandidate(id: "p", pose: at(0), t: 0, blurPx: 1)
         // 3.5 px on a 4032 px still is 1.67 px at 1920 px: within 1.2 × 1.5 px.
         #expect(policy.accept(stillPose: at(0.1), stillBlurPx: 3.5, stillWidth: 4032, held: held))
@@ -63,23 +63,23 @@ struct PolicyTests {
     func stillRequests() {
         var requests = StillRequests()
         var asks: [Bool] = []
-        asks.append(requests.ask(for: "p1", now: 10, thermalNominal: true, enabled: true))
-        asks.append(requests.ask(for: "p2", now: 11, thermalNominal: true, enabled: true))
+        asks.append(requests.ask(for: "p1", now: 10, enabled: true))
+        asks.append(requests.ask(for: "p2", now: 11, enabled: true))
         #expect(asks == [true, false])
         let late = requests.arrived(now: 14.5)
         #expect(late == nil)
-        let next = requests.ask(for: "p3", now: 20, thermalNominal: true, enabled: true)
+        let next = requests.ask(for: "p3", now: 20, enabled: true)
         let onTime = requests.arrived(now: 20.4)
         #expect(next && onTime == "p3")
         // Rationed: one second after the last is too soon.
-        let soon = requests.ask(for: "p4", now: 21, thermalNominal: true, enabled: true)
+        let soon = requests.ask(for: "p4", now: 21, enabled: true)
         #expect(soon == false)
     }
 
     @Test("forgets a still that never comes back, so the next can be asked for")
     func lostStill() {
         var requests = StillRequests()
-        let asks = [0.0, 2, 4].enumerated().map { i, now in requests.ask(for: "p\(i + 1)", now: now, thermalNominal: true, enabled: true) }
+        let asks = [0.0, 2, 4].enumerated().map { i, now in requests.ask(for: "p\(i + 1)", now: now, enabled: true) }
         #expect(asks == [true, false, true])
         #expect(requests.waiting == StillRequests.Waiting(forID: "p3", askedAt: 4))
     }

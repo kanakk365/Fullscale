@@ -14,8 +14,11 @@ public struct StillPolicy: Sendable {
 
     public init() {}
 
-    public func mayRequest(now: Double, lastStill: Double?, thermalNominal: Bool, enabled: Bool) -> Bool {
-        guard enabled, thermalNominal else { return false }
+    /// `enabled` comes from the capture budget, which turns stills off once the phone is
+    /// hot ("serious"). A scan warms the phone to "fair" within seconds, so that alone
+    /// doesn't stop them.
+    public func mayRequest(now: Double, lastStill: Double?, enabled: Bool) -> Bool {
+        guard enabled else { return false }
         guard let lastStill else { return true }
         return now - lastStill >= Self.minIntervalS
     }
@@ -43,9 +46,9 @@ public struct StillRequests: Sendable {
     public init() {}
 
     /// Ask for a still for the photo `id`? When the answer is yes, the request is noted.
-    public mutating func ask(for id: String, now: Double, thermalNominal: Bool, enabled: Bool) -> Bool {
+    public mutating func ask(for id: String, now: Double, enabled: Bool) -> Bool {
         if let waiting, now - waiting.askedAt > StillPolicy.answerTimeoutS { self.waiting = nil }
-        guard waiting == nil, policy.mayRequest(now: now, lastStill: lastAsked, thermalNominal: thermalNominal, enabled: enabled) else { return false }
+        guard waiting == nil, policy.mayRequest(now: now, lastStill: lastAsked, enabled: enabled) else { return false }
         waiting = Waiting(forID: id, askedAt: now)
         lastAsked = now
         return true

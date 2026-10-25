@@ -135,21 +135,29 @@ final class Recorder {
             log(.scannerFailed, room: entry.id, detail: scannerProblem)
         }
         let encoder = JSONEncoder()
-        do {
-            if let data {
-                // The raw data first: it can be turned into a room layout again later even if
-                // building the layout now fails.
+        // The scanner can hold NaN or infinity (seen on a real scan), which JSON has no
+        // numbers for; they are written as strings. The importer reports an element they make
+        // unreadable instead of failing the room.
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
+        // Each part is saved on its own, so one that fails doesn't lose the others.
+        if let data {
+            // The raw data first: it can be turned into a room layout again later even if
+            // building the layout now fails.
+            // Only a backup. Apple's encoder for it can fail with "Invalid data" (seen on
+            // iOS 27, reported by others too), so a failure is logged, not shown.
+            await saveRoomPart("the scanner's raw data", of: entry, showFailure: false) {
                 try await writer.write(try encoder.encode(data), at: "\(entry.dir)/roomplan-data.json")
+            }
+            await saveRoomPart("the room layout", of: entry) {
                 let layout = try await RoomBuilder(options: [.beautifyObjects]).capturedRoom(from: data)
                 try await writer.write(try encoder.encode(layout), at: "\(entry.dir)/roomplan.json")
             }
+        }
+        await saveRoomPart("the 3D mesh", of: entry) {
             let meshData = MeshExport.mesh(from: mesh)
             let url = writer.folder.appendingPathComponent("mesh/session.ply")
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try PLY.write(vertices: meshData.vertices, faces: meshData.faces, to: url)
-        } catch {
-            problem = "Part of \(entry.name) could not be saved: \(error.localizedDescription)"
-            log(.writeFailed, detail: "\(entry.dir): \(error.localizedDescription)")
         }
         let ended = Date()
         roomRecord?.endedAt = ended
@@ -174,6 +182,24 @@ final class Recorder {
         // The room's record was written when the room ended; write it again with this check.
         writeRoomRecord()
         return scanM.map { TapeGrading.band(scanM: $0, tapeM: tapeM) }
+    }
+
+    private func saveRoomPart(_ what: String, of entry: Manifest.Room, showFailure: Bool = true, _ work: () async throws -> Void) async {
+        do {
+            try await work()
+        } catch {
+            let reason = Self.describe(error)
+            if showFailure { problem = "\(what.prefix(1).uppercased())\(what.dropFirst()) of \(entry.name) could not be saved: \(reason)" }
+            log(.writeFailed, room: entry.id, detail: "\(entry.dir), \(what): \(reason)")
+        }
+    }
+
+    /// An error in words. An encoding error's own words don't say which value was wrong, so
+    /// its path is added.
+    private static func describe(_ error: any Error) -> String {
+        guard case let EncodingError.invalidValue(_, context) = error else { return error.localizedDescription }
+        let path = context.codingPath.map { $0.intValue.map(String.init) ?? $0.stringValue }.joined(separator: ".")
+        return "\(context.debugDescription) (at \(path.isEmpty ? "the top" : path))"
     }
 
     private func writeRoomRecord() {
@@ -347,7 +373,7 @@ final class Recorder {
     // ---------- full-resolution stills ----------
 
     private func askForStill(for candidate: PhotoCandidate, budget: CaptureBudget) {
-        guard stillRequests.ask(for: candidate.id, now: candidate.t, thermalNominal: lastThermal == .nominal, enabled: budget.stills) else { return }
+        guard stillRequests.ask(for: candidate.id, now: candidate.t, enabled: budget.stills) else { return }
         stillFor = candidate
         host.captureStill { [weak self] still, error in self?.stillArrived(still, error: error) }
     }
