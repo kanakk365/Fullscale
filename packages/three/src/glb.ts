@@ -73,9 +73,11 @@ export function writeGlb(root: THREE.Object3D, opts: { generator: string; extras
     return json.bufferViews.length - 1;
   };
 
-  const addAttribute = (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, size: number, withBounds: boolean): number => {
+  const addAttribute = (attr: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, size: number, withBounds: boolean, flipV = false): number => {
     const data = new Float32Array(attr.count * size);
     for (let i = 0; i < attr.count; i++) for (let k = 0; k < size; k++) data[i * size + k] = attr.getComponent(i, k);
+    // three.js counts texture v up from the bottom; glTF counts it down from the top.
+    if (flipV) for (let i = 0; i < attr.count; i++) data[i * 2 + 1] = 1 - data[i * 2 + 1]!;
     const accessor: Record<string, unknown> = { bufferView: addView(data, ARRAY_BUFFER), componentType: FLOAT, count: attr.count, type: size === 2 ? 'VEC2' : 'VEC3' };
     if (withBounds) {
       const min = [Infinity, Infinity, Infinity];
@@ -103,11 +105,15 @@ export function writeGlb(root: THREE.Object3D, opts: { generator: string; extras
     const std = m as THREE.MeshStandardMaterial;
     const color = std.color ?? new THREE.Color(1, 1, 1);
     const opacity = m.transparent ? m.opacity : 1;
+    const glow = std.emissive && std.emissiveIntensity > 0 ? std.emissive.clone().multiplyScalar(std.emissiveIntensity) : null;
     json.materials.push({
       name: m.name || undefined,
       pbrMetallicRoughness: { baseColorFactor: [color.r, color.g, color.b, opacity], metallicFactor: std.metalness ?? 0, roughnessFactor: std.roughness ?? 1 },
       ...(opacity < 1 ? { alphaMode: 'BLEND' } : {}),
       ...(m.side === THREE.DoubleSide ? { doubleSided: true } : {}),
+      ...(glow && (glow.r || glow.g || glow.b) ? { emissiveFactor: [Math.min(1, glow.r), Math.min(1, glow.g), Math.min(1, glow.b)] } : {}),
+      // What it's made of (fabric, wood, tile…), so Blender can give it a real surface.
+      ...(m.userData?.fullscale ? { extras: { fullscale: m.userData.fullscale } } : {}),
     });
     materialIndex.set(m, json.materials.length - 1);
     return json.materials.length - 1;
@@ -126,7 +132,7 @@ export function writeGlb(root: THREE.Object3D, opts: { generator: string; extras
     const normal = geometry.getAttribute('normal');
     if (normal) attributes.NORMAL = addAttribute(normal, 3, false);
     const uv = geometry.getAttribute('uv');
-    if (uv) attributes.TEXCOORD_0 = addAttribute(uv, 2, false);
+    if (uv) attributes.TEXCOORD_0 = addAttribute(uv, 2, false, true);
 
     const index = geometry.getIndex();
     const all = index ? Array.from({ length: index.count }, (_, i) => index.getX(i)) : Array.from({ length: position.count }, (_, i) => i);
@@ -149,6 +155,8 @@ export function writeGlb(root: THREE.Object3D, opts: { generator: string; extras
     if (s.x !== 1 || s.y !== 1 || s.z !== 1) node.scale = [s.x, s.y, s.z];
     if (object.userData?.id) node.extras = { fullscale: { id: object.userData.id, kind: object.userData.kind } };
     if (object.userData?.hinge) node.extras = { fullscale: { hinge: object.userData.hinge } };
+    // A lamp's light: where it shines from, its shape, colour and brightness.
+    if (object.userData?.light) node.extras = { fullscale: { light: object.userData.light } };
     const mesh = (object as THREE.Mesh).isMesh ? addMesh(object as THREE.Mesh) : undefined;
     if (mesh !== undefined) node.mesh = mesh;
     json.nodes.push(node);

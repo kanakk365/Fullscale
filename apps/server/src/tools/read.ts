@@ -1,6 +1,7 @@
 // Tools that look but never change anything.
 import {
   CATALOG,
+  CATEGORIES,
   checkFit,
   clearance,
   EditError,
@@ -307,19 +308,39 @@ export const validate = defineTool({
 export const searchCatalog = defineTool({
   name: 'search_catalog',
   title: 'Furniture catalogue',
-  description: 'Built-in furniture with typical sizes. Use an entry’s id with add_items, and give the real product size when known.',
+  description:
+    'Built-in furniture, lights and fittings with typical sizes. Use an entry’s id with add_items, and give the real product size when known. Lights (category lighting) light the room in renders; things that hang from the ceiling go up to it by themselves.',
   input: z.object({
     query: z.string().max(80).optional().describe('words in the name or id'),
-    category: z.enum(['living', 'bedroom', 'dining', 'office', 'kitchen', 'bathroom', 'storage', 'decor']).optional(),
+    category: z.enum(CATEGORIES).optional(),
   }),
   effect: 'read',
   run(_ctx, { query, category }) {
     const words = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
     const found = CATALOG.filter((c) => (!category || c.category === category) && words.every((w) => `${c.id} ${c.name}`.toLowerCase().includes(w)));
     const text = found.length
-      ? found.map((c) => `${c.id}: ${c.name}, ${c.size.map((v) => v.toFixed(2)).join(' × ')} m (w × h × d)${c.againstWall ? ', usually against a wall' : ''}`).join('\n')
+      ? found
+          .map(
+            (c) =>
+              `${c.id}: ${c.name}, ${c.size.map((v) => v.toFixed(2)).join(' × ')} m (w × h × d)${c.againstWall ? ', usually against a wall' : ''}${c.ceiling ? ', hangs from the ceiling' : ''}${c.light ? `, a light (${c.light.kelvin} K, ${c.light.lumens} lm)` : ''}`,
+          )
+          .join('\n')
       : 'Nothing matched. "box" is a plain box at any size.';
-    return { text, data: { entries: found.map((c) => ({ id: c.id, name: c.name, category: c.category, size: c.size, parts: c.parts, againstWall: !!c.againstWall })) } };
+    return {
+      text,
+      data: {
+        entries: found.map((c) => ({
+          id: c.id,
+          name: c.name,
+          category: c.category,
+          size: c.size,
+          parts: c.parts,
+          againstWall: !!c.againstWall,
+          ...(c.ceiling ? { ceiling: true } : {}),
+          ...(c.light ? { light: { kelvin: c.light.kelvin, lumens: c.light.lumens } } : {}),
+        })),
+      },
+    };
   },
 });
 

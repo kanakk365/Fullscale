@@ -4,15 +4,19 @@
 #
 #   blender -b --factory-startup --python blender/render/render.py -- \
 #       --glb home.glb --out picture.png --camera '{"eye":[x,y,z],"target":[x,y,z],"fov":40}' \
-#       --preset preview
+#       --preset preview [--blend scene.blend] \
+#       [--lighting '{"time":"day","sun":[x,y,z],"windows":[{"centre":[x,y,z],"width":w,"height":h,"inward":[x,y,z]}]}'] \
+#       [--files <the home's folder, for pictures on materials>] \
+#       [--models '[{"item":id,"file":path,"fit":"uniform","yaw":0,"size":[w,h,d]}]']
 #
-# The camera is in the studio's terms (metres, +Y up); Blender is +Z up.
+# The camera, the sun and the windows are in the studio's terms (metres, +Y up); Blender is
+# +Z up. `sun` points towards the sun; a window's `inward` points into its room.
 from __future__ import annotations
 
 import argparse
 import json
 import math
-from typing import List, NamedTuple, Sequence, Tuple
+from typing import List, NamedTuple, Optional, Sequence, Tuple
 
 Vector3 = Tuple[float, float, float]
 
@@ -32,6 +36,38 @@ PRESETS = {
 }
 
 
+TIMES = ("day", "evening", "night")
+
+
+class Window(NamedTuple):
+    """A window the daylight comes in through, in Blender's frame."""
+
+    centre: Vector3
+    width: float
+    height: float
+    inward: Vector3
+
+
+class Lighting(NamedTuple):
+    """The light outside: the time of day, which way the sun is (towards it, in Blender's
+    frame) and the windows it comes in through."""
+
+    time: str = "day"
+    sun: Optional[Vector3] = None
+    windows: Tuple[Window, ...] = ()
+
+
+class OwnModel(NamedTuple):
+    """The person's own model for an item: its file on this computer, how to fit it, and the
+    item's real size [width, height, depth]."""
+
+    item: str
+    file: str
+    fit: str
+    yaw: float
+    size: Vector3
+
+
 class Job(NamedTuple):
     glb: str
     out: str
@@ -39,6 +75,12 @@ class Job(NamedTuple):
     target: Vector3
     fov: float
     preset: Preset
+    # Also save the scene as a Blender file here, to open and look around in.
+    blend: Optional[str] = None
+    lighting: Lighting = Lighting()
+    # The home's folder, where pictures on materials live.
+    files: Optional[str] = None
+    models: Tuple[OwnModel, ...] = ()
 
 
 class JobError(Exception):
@@ -52,6 +94,10 @@ def parse_job(argv: List[str]) -> Job:
     parser.add_argument("--out", required=True)
     parser.add_argument("--camera", required=True)
     parser.add_argument("--preset", default="preview", choices=sorted(PRESETS))
+    parser.add_argument("--blend")
+    parser.add_argument("--lighting")
+    parser.add_argument("--files")
+    parser.add_argument("--models")
     try:
         args = parser.parse_args(argv)
     except SystemExit as error:  # argparse exits on bad arguments; report instead
@@ -67,7 +113,53 @@ def parse_job(argv: List[str]) -> Job:
         raise JobError("The field of view must be between 10 and 120 degrees.")
     if math.dist(eye, target) < 1e-6:
         raise JobError("The camera's eye and target are the same point.")
-    return Job(args.glb, args.out, eye, target, fov, PRESETS[args.preset])
+    lighting = parse_lighting(args.lighting) if args.lighting else Lighting()
+    models = parse_models(args.models) if args.models else ()
+    return Job(args.glb, args.out, eye, target, fov, PRESETS[args.preset], args.blend, lighting, args.files, models)
+
+
+def parse_models(text: str) -> Tuple[OwnModel, ...]:
+    """Read the --models argument: [{"item", "file", "fit", "yaw", "size": [w, h, d]}]."""
+    try:
+        models = tuple(
+            OwnModel(str(m["item"]), str(m["file"]), str(m.get("fit", "uniform")), float(m.get("yaw", 0)), _vector(m["size"])) for m in json.loads(text)
+        )
+    except (ValueError, KeyError, TypeError) as error:
+        raise JobError('The models must be [{"item": id, "file": path, "fit": "uniform" | "stretch", "yaw": degrees, "size": [w, h, d]}].') from error
+    if any(min(m.size) <= 0 for m in models):
+        raise JobError("An item's size must be more than 0 each way.")
+    return models
+
+
+def parse_lighting(text: str) -> Lighting:
+    """Read the --lighting argument (studio frame) into Blender's frame."""
+    try:
+        value = json.loads(text)
+        time = value.get("time", "day")
+        sun = _unit(studio_to_blender(_vector(value["sun"]))) if value.get("sun") is not None else None
+        windows = tuple(
+            Window(
+                studio_to_blender(_vector(w["centre"])),
+                float(w["width"]),
+                float(w["height"]),
+                _unit(studio_to_blender(_vector(w["inward"]))),
+            )
+            for w in value.get("windows", [])
+        )
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        raise JobError('The lighting must be {"time": "day" | "evening" | "night", "sun": [x, y, z], "windows": [...]}.') from error
+    if time not in TIMES:
+        raise JobError(f'The time of day must be one of {", ".join(TIMES)}, not "{time}".')
+    if any(w.width <= 0 or w.height <= 0 for w in windows):
+        raise JobError("A window's width and height must be more than 0.")
+    return Lighting(time, sun, windows)
+
+
+def _unit(v: Vector3) -> Vector3:
+    length = math.sqrt(_dot(v, v))
+    if length < 1e-9:
+        raise ValueError("a direction can't be zero")
+    return (v[0] / length, v[1] / length, v[2] / length)
 
 
 def _vector(value: Sequence[float]) -> Vector3:

@@ -43,9 +43,12 @@ export const KINDS: Readonly<Record<Kind, KindInfo>> = {
   opening: kind({
     kind: 'opening',
     collection: 'openings',
-    refs: [{ path: 'wall', target: 'wall', onDelete: 'cascade' }],
-    dimensions: ['offset', 'width', 'height', 'sill'],
-    nested: ['sources'],
+    refs: [
+      { path: 'wall', target: 'wall', onDelete: 'cascade' },
+      { path: 'materials.*', target: 'material', onDelete: 'refuse' },
+    ],
+    dimensions: ['offset', 'width', 'height', 'sill', 'depth'],
+    nested: ['materials', 'sources'],
   }),
   room: kind({
     kind: 'room',

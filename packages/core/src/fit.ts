@@ -126,7 +126,8 @@ interface Context {
 function context(home: Home, level: string, ignore: Set<string>): Context {
   const walls = home.walls.filter((w) => w.level === level && !ignore.has(w.id));
   const items = home.items.filter((i) => i.level === level && !ignore.has(i.id) && catalogEntry(i.catalog).shape !== 'rug');
-  const doors = home.openings.filter((o) => o.type !== 'window' && walls.some((w) => w.id === o.wall)).map((o) => ({ opening: o, zones: doorZones(home, o) }));
+  // Only doors and plain openings are ways through; windows and niches are not.
+  const doors = home.openings.filter((o) => (o.type === 'door' || o.type === 'opening') && walls.some((w) => w.id === o.wall)).map((o) => ({ opening: o, zones: doorZones(home, o) }));
   return { walls, items, doors };
 }
 

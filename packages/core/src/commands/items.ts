@@ -3,8 +3,13 @@ import { z } from 'zod';
 import { CATALOG, CATALOG_BY_ID } from '../catalog.ts';
 import { EditError } from '../errors.ts';
 import { takeId } from '../ids.ts';
-import { FieldSourcesSchema, IdSchema, ModelRefSchema, SourceSchema, Vec2Schema, Vec3Schema, type Item, type Vec3 } from '../schema.ts';
+import { FieldSourcesSchema, IdSchema, LightSchema, ModelRefSchema, SourceSchema, Vec2Schema, Vec3Schema, type Item, type Vec3 } from '../schema.ts';
 import { assignPatch, defineCommand, find, levelFor, mergeSources } from './edit.ts';
+
+/** Leave out keys whose value is undefined. */
+function strip<T extends Record<string, unknown>>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
+}
 import { Coordinate, Length, SourcesInput } from './inputs.ts';
 
 const Size = z.tuple([Length, Length, Length]);
@@ -13,6 +18,17 @@ const Position = z.union([Vec2Schema, Vec3Schema]);
 
 function toVec3(position: [number, number] | [number, number, number], keepY = 0): Vec3 {
   return position.length === 2 ? [position[0], keepY, position[1]] : position;
+}
+
+const LightInput = LightSchema.partial();
+
+/** Lights only: switching a sofa on means the wrong item was picked. */
+function lightFor(item: Pick<Item, 'id' | 'name' | 'catalog'>, catalog: { light?: unknown }) {
+  if (!catalog.light) {
+    throw new EditError('not_a_light', `"${item.name}" (${item.catalog}) isn't a light. Lights are in the catalogue's lighting group: search_catalog with category "lighting".`, {
+      id: item.id,
+    });
+  }
 }
 
 function catalogFor(id: string) {
@@ -39,6 +55,8 @@ export const addItem = defineCommand(
     size: Size.optional(),
     materials: z.record(z.string(), IdSchema).optional(),
     model: ModelRefSchema.optional(),
+    /** lights only: on or off, colour and brightness when not the catalogue's */
+    light: LightInput.optional(),
     source: SourceSchema.optional(),
     sources: FieldSourcesSchema.optional(),
   }),
@@ -61,6 +79,10 @@ export const addItem = defineCommand(
     if (!input.size && !input.sources?.size) item.sources = { size: { kind: 'catalog' } };
     if (input.sources) item.sources = { ...item.sources, ...input.sources };
     if (input.model) item.model = input.model;
+    if (input.light) {
+      lightFor(item, entry);
+      item.light = { on: input.light.on ?? true, ...strip(input.light) };
+    }
     d.home.items.push(item);
   },
 );
@@ -76,15 +98,22 @@ export const updateItem = defineCommand(
     materials: z.record(z.string(), IdSchema.nullable()).optional(),
     /** null: go back to the catalogue shape */
     model: ModelRefSchema.nullable().optional(),
+    /** lights only: merged into the current light; null goes back to the catalogue's, on */
+    light: LightInput.nullable().optional(),
     locked: z.boolean().optional(),
     level: IdSchema.optional(),
     source: SourceSchema.optional(),
     sources: SourcesInput.optional(),
   }),
-  (d, { id, position, materials, sources, ...patch }) => {
+  (d, { id, position, materials, light, sources, ...patch }) => {
     const item = find(d.home, 'items', id);
     if (item.locked && patch.locked !== false) {
       throw new EditError('locked_element', `"${item.name}" (${id}) is locked. Unlock it first.`, { id });
+    }
+    if (light !== undefined) {
+      lightFor(item, CATALOG_BY_ID.get(item.catalog) ?? {});
+      if (light === null) delete item.light;
+      else item.light = { ...item.light, ...strip(light), on: light.on ?? item.light?.on ?? true };
     }
     if (patch.level) find(d.home, 'levels', patch.level);
     assignPatch(item, patch);

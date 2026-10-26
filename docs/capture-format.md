@@ -42,6 +42,9 @@ The importer (`packages/capture`) turns a capture into an editable home where ev
   built/                            made on the computer by the room builder, never by the phone:
   built/room.glb                      the detailed, coloured model, in this capture's world frame
   built/build.json                    what was built, from what, and with which settings
+  built/aligned.json                  for another scan of a room: how its world maps onto the first scan's
+                                      ({ format: "fullscale-alignment/1", to, method, fit, matrix[16] }),
+                                      written by the studio when it lines the scan up
 ```
 
 Only `manifest.json` is required. Everything else is optional, so a phone without LiDAR (no mesh, no depth) or a capture cut short still opens.
@@ -69,7 +72,7 @@ Only `manifest.json` is required. Everything else is optional, so a phone withou
 
 **Photo** (`photos/index.jsonl`):
 `{ id, file, room, kind, t, width, height, pose[16], intrinsics { fx, fy, cx, cy }, tracking, blurPx, camera { exposureS, iso, evOffset, whiteBalanceGains [r, g, b], whiteBalanceLocked, exposureLocked }, keyframe? }`
-`kind` is `auto`, `manual`, `still`, `card` or `tape`. A `still` is a full-resolution picture taken alongside an `auto` photo of the same view; stills are rationed (at most one every 3 s, none when the phone is warm) and kept only when they match the photo's view and sharpness. `blurPx` is the motion blur predicted from the poses: focal length × exposure × (angular speed + linear speed ÷ 2). `camera.iso` is 0 and `whiteBalanceGains` empty when the camera did not report them.
+`kind` is `auto`, `manual`, `still`, `card`, `tape` or `detail`. A `detail` is a full-resolution close-up the person took with the Detail button (a bedsheet's print, a photo in a frame, a screen), kept as taken, for copying those surfaces onto the model. A `still` is a full-resolution picture taken alongside an `auto` photo of the same view; stills are rationed (at most one every 3 s, none when the phone is warm) and kept only when they match the photo's view and sharpness. `blurPx` is the motion blur predicted from the poses: focal length × exposure × (angular speed + linear speed ÷ 2). `camera.iso` is 0 and `whiteBalanceGains` empty when the camera did not report them.
 
 **Depth keyframe** (`frames/index.jsonl`):
 `{ id, t, room, pose[16], depth { file, width, height, intrinsics }, confidence { file }, rgb { file, width, height, intrinsics } }`

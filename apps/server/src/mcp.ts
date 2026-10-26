@@ -12,6 +12,9 @@ export const INSTRUCTIONS = `Fullscale holds one home (or any space) at real siz
 - Lengths you send may be text with units ("350 cm", "11' 6\\"").
 - Start with get_home, then get_level. Look with view_plan before and after editing.
 - Every number says where it came from (scan, user, plan, maker, catalog, estimate, agent) and how sure it is. Never invent a measurement: ask the person, or say a value is an estimate (set_source).
+- When a scan or photo leaves you unsure (a curtain or a painted wall? which colour? what is this object? built in or furniture?), ask the person before building on a guess: a few short questions at a time, with the choices you see, pointing at the place with highlight. Mark what you still had to guess as an estimate.
+- view_photo shows the scans' photos (what each shows, where it was taken from); texture_from_photo puts their real pictures on the model: prints, framed photos, screens.
+- Renders are lit by the home's own lights (the catalogue's lighting items) and daylight for the time asked. Scans don't find lights: add the room's real ones from its photos, and ask whether they are warm or white when you can't tell.
 - Writes answer with what really changed ("achieved") and the new revision. Pass expect_rev to refuse if someone changed the home meanwhile.
 - A refusal has a code and says what would work. Nothing changes when a call is refused.
 - check_fit answers say what was and was not checked; don't claim more.

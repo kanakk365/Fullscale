@@ -11,6 +11,7 @@ import {
   fitsThrough,
   isEditError,
   itemFootprint,
+  itemLight,
   moveWallEnd,
   paint,
   planDistance,
@@ -22,6 +23,11 @@ import {
   summarizeHome,
   updateItem,
   updateWall,
+  updateOpening,
+  upsertMaterial,
+  NICHE_DEPTH,
+  roomFace,
+  planGeometry,
   validateHome,
   wallFootprint,
   wallHeight,
@@ -122,9 +128,65 @@ describe('paint', () => {
     expect(h.materials.filter((m) => m.color === '#123456')).toHaveLength(1);
   });
 
+  it('paints a door’s leaf and a window’s glass, and keeps a material in use from being deleted', () => {
+    let h = addOpening(flat(), { id: 'd1', wall: 'wall-1', type: 'door' }).home;
+    h = addOpening(h, { id: 'w1', wall: 'wall-2', type: 'window', offset: 0.5, width: 1, height: 1.2, sill: 0.9 }).home;
+    h = paint(h, { target: { opening: 'd1' }, color: '#3b2620', name: 'Dark wood' }).home;
+    h = upsertMaterial(h, { material: { id: 'green-glass', name: 'Green glass', kind: 'glass', color: '#3f7a4a', roughness: 0.1, metalness: 0, opacity: 0.55 } }).home;
+    h = paint(h, { target: { opening: 'w1', part: 'glass' }, material: 'green-glass' }).home;
+    const door = h.openings.find((o) => o.id === 'd1')!;
+    expect(h.materials.find((m) => m.id === door.materials?.leaf)?.color).toBe('#3b2620');
+    expect(h.openings.find((o) => o.id === 'w1')?.materials).toEqual({ glass: 'green-glass' });
+    expect(codeOf(() => paint(h, { target: { opening: 'd1', part: 'glass' }, color: '#ffffff' }))).toBe('invalid_input');
+    expect(codeOf(() => remove(h, { ids: ['green-glass'] }))).toBe('in_use');
+  });
+
   it('reports no change when painting the same colour twice', () => {
     const h = paint(flat(), { target: { wall: 'wall-1', face: 'right' }, color: '#123456' }).home;
     expect(paint(h, { target: { wall: 'wall-1', face: 'right' }, color: '#123456' }).achieved.unchanged).toBe(true);
+  });
+});
+
+describe('niches', () => {
+  const thick = () => updateWall(flat(), { id: 'wall-1', thickness: 0.25 }).home;
+
+  it('cuts a niche into the room side of the wall, as deep as asked', () => {
+    const h = addOpening(thick(), { id: 'n1', wall: 'wall-1', type: 'niche', width: 0.8, height: 1.3, sill: 0.5, depth: 0.2, shelves: 2 }).home;
+    const n = h.openings.find((o) => o.id === 'n1')!;
+    expect(n).toMatchObject({ type: 'niche', depth: 0.2, shelves: 2 });
+    expect(n.face).toBe(roomFace(h, h.walls.find((w) => w.id === 'wall-1')!));
+    expect(n.face).not.toBeNull();
+    expect(validateHome(h).filter((i) => i.severity === 'error')).toEqual([]);
+  });
+
+  it('defaults to a depth that leaves wall behind it', () => {
+    const shallow = addOpening(flat(), { id: 'n1', wall: 'wall-1', type: 'niche' }).home.openings[0]!;
+    expect(shallow.depth).toBeCloseTo(0.12 * 0.7, 9);
+    const deep = addOpening(thick(), { id: 'n1', wall: 'wall-1', type: 'niche' }).home.openings[0]!;
+    expect(deep.depth).toBe(NICHE_DEPTH);
+  });
+
+  it('refuses a niche deeper than the wall, and anything passing through one', () => {
+    expect(codeOf(() => addOpening(flat(), { wall: 'wall-1', type: 'niche', depth: 0.2 }))).toBe('niche_too_deep');
+    const h = addOpening(thick(), { id: 'n1', wall: 'wall-1', type: 'niche' }).home;
+    expect(codeOf(() => fitsThrough(h, 'n1', [0.5, 0.5, 0.5]))).toBe('not_a_way_through');
+  });
+
+  it('keeps the wall solid across a niche on the plan', () => {
+    const h = thick();
+    const solid = (home: Home) => planGeometry(home).primitives.filter((p) => p.kind === 'polygon' && p.role === 'wall' && p.id === 'wall-1').length;
+    const withNiche = addOpening(h, { id: 'n1', wall: 'wall-1', type: 'niche' }).home;
+    const withOpening = addOpening(h, { id: 'o1', wall: 'wall-1', type: 'opening' }).home;
+    expect(solid(withNiche)).toBe(solid(h));
+    expect(solid(withOpening)).toBe(solid(h) + 1);
+    expect(planGeometry(withNiche).primitives.some((p) => p.kind === 'polygon' && p.role === 'opening' && p.id === 'n1')).toBe(true);
+  });
+
+  it('shuts a door', () => {
+    let h = addOpening(flat(), { id: 'd1', wall: 'wall-1', type: 'door', openDegrees: 0 }).home;
+    expect(h.openings[0]!.openDegrees).toBe(0);
+    h = updateOpening(h, { id: 'd1', openDegrees: 90 }).home;
+    expect(h.openings[0]!.openDegrees).toBe(90);
   });
 });
 
@@ -262,6 +324,32 @@ describe('furniture', () => {
   it('refuses misspelt fields instead of ignoring them', () => {
     const h = addItem(flat(), { catalog: 'plant', position: [1, 1] }).home;
     expect(codeOf(() => updateItem(h, { id: 'plant-1', colour: '#ffffff' } as never))).toBe('invalid_input');
+  });
+});
+
+describe('lights', () => {
+  it('shine with the catalogue’s colour and brightness until told otherwise', () => {
+    const h = addItem(flat(), { catalog: 'wall-bulb', position: [2, 0.1], light: { lumens: 1100 } }).home;
+    expect(itemLight(h.items[0]!)).toEqual({ on: true, kelvin: 6500, lumens: 1100, part: 'bulb' });
+    expect(itemLight({ catalog: 'sofa-3' })).toBeNull();
+  });
+
+  it('switch off and on, keeping their settings, and go back to the catalogue’s with null', () => {
+    let h = addItem(flat(), { catalog: 'floor-lamp', position: [1, 1] }).home;
+    h = updateItem(h, { id: 'floor-lamp-1', light: { kelvin: 3000 } }).home;
+    h = updateItem(h, { id: 'floor-lamp-1', light: { on: false } }).home;
+    expect(itemLight(h.items[0]!)).toMatchObject({ on: false, kelvin: 3000 });
+    h = updateItem(h, { id: 'floor-lamp-1', light: { on: true } }).home;
+    expect(itemLight(h.items[0]!)).toMatchObject({ on: true, kelvin: 3000 });
+    h = updateItem(h, { id: 'floor-lamp-1', light: null }).home;
+    expect(h.items[0]!.light).toBeUndefined();
+    expect(itemLight(h.items[0]!)).toMatchObject({ on: true, kelvin: 2700 });
+  });
+
+  it('can’t be set on things that aren’t lights', () => {
+    expect(codeOf(() => addItem(flat(), { catalog: 'sofa-3', position: [2, 1.5], light: { on: true } }))).toBe('not_a_light');
+    const h = addItem(flat(), { catalog: 'sofa-3', position: [2, 1.5] }).home;
+    expect(codeOf(() => updateItem(h, { id: 'sofa-3-1', light: { kelvin: 2700 } }))).toBe('not_a_light');
   });
 });
 

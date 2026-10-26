@@ -165,6 +165,7 @@ export function roomInfo(home: Home, id: string) {
 export function fitsThrough(home: Home, openingId: string, size: [number, number, number], margin = 0.02): { fits: boolean; clearWidth: number; clearHeight: number; explanation: string } {
   const o = home.openings.find((x) => x.id === openingId);
   if (!o) throw notFound('opening', openingId);
+  if (o.type === 'niche') throw new EditError('not_a_way_through', `"${o.id}" is a niche (a recess in the wall), so nothing passes through it. Check a door or opening instead.`, { id: o.id });
   const W = o.width - margin;
   const H = o.height - margin;
   const [a, b] = [...size].sort((x, y) => x - y) as [number, number, number];

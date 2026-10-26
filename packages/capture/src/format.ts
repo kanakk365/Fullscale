@@ -70,7 +70,8 @@ export const PhotoRecordSchema = z.object({
   id: z.string(),
   file: RelativePath,
   room: z.string().optional(),
-  kind: z.enum(['auto', 'manual', 'still', 'card', 'tape']),
+  /** detail: a close-up taken on purpose (a print, a picture, a screen), to copy onto the model */
+  kind: z.enum(['auto', 'manual', 'still', 'card', 'tape', 'detail']),
   t: finite(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),

@@ -138,7 +138,34 @@ export function buildWallGeometry(home: Home, wall: Wall, joins: LevelJoins = le
 }
 
 /** Door leaves, window glass and frames for one opening, in world space. */
-export function buildOpeningFill(wall: Wall, o: Opening, mats: { frame: THREE.Material; glass: THREE.Material; door: THREE.Material }): THREE.Group {
+/** A door leaf centred on its own origin: flush, or with raised panels stacked up both
+ *  faces, and a handle on both faces near its free edge (`handleSide` is -1 or 1 along x). */
+function doorLeaf(w: number, h: number, t: number, panels: number, wood: THREE.Material, metal: THREE.Material, handleSide: number): THREE.Group {
+  const leaf = new THREE.Group();
+  const add = (bw: number, bh: number, bd: number, x: number, y: number, m: THREE.Material) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), m);
+    mesh.position.set(x, y, 0);
+    leaf.add(mesh);
+  };
+  add(w, h, t, 0, 0, wood);
+  if (panels > 0) {
+    // Stiles at the sides, rails between: a deeper bottom rail, as panelled doors have.
+    const stile = Math.min(0.1, w * 0.18);
+    const top = 0.1;
+    const bottom = Math.min(0.22, h * 0.12);
+    const rail = 0.09;
+    const panelH = (h - top - bottom - rail * (panels - 1)) / panels;
+    for (let i = 0; i < panels; i++) {
+      const y = -h / 2 + bottom + panelH / 2 + i * (panelH + rail);
+      add(w - 2 * stile, panelH, t + 0.012, 0, y, wood);
+    }
+  }
+  const x = handleSide * (w / 2 - Math.min(0.07, w * 0.12));
+  add(0.025, 0.14, t + 0.05, x, 1.0 - h / 2 - 0.05, metal);
+  return leaf;
+}
+
+export function buildOpeningFill(wall: Wall, o: Opening, mats: { frame: THREE.Material; glass: THREE.Material; door: THREE.Material; inside?: THREE.Material; metal?: THREE.Material }): THREE.Group {
   const g = new THREE.Group();
   const d = wallDirection(wall);
   const n = leftOf(d);
@@ -158,33 +185,76 @@ export function buildOpeningFill(wall: Wall, o: Opening, mats: { frame: THREE.Ma
     g.add(mesh);
     return mesh;
   };
-  if (o.type === 'window') {
-    addBox(o.width, frameT, depth, 0, o.height / 2 - frameT / 2, 0, mats.frame);
-    addBox(o.width, frameT, depth, 0, -o.height / 2 + frameT / 2, 0, mats.frame);
-    addBox(frameT, o.height, depth, -o.width / 2 + frameT / 2, 0, 0, mats.frame);
-    addBox(frameT, o.height, depth, o.width / 2 - frameT / 2, 0, 0, mats.frame);
-    if (o.width > 1.0) addBox(frameT * 0.8, o.height - 2 * frameT, depth * 0.6, 0, 0, 0, mats.frame);
-    addBox(o.width - 2 * frameT, o.height - 2 * frameT, 0.01, 0, 0, 0, mats.glass);
+  if (o.type === 'niche') {
+    // The wall's outline has a hole here; fill it from the far face back to the recess's
+    // depth, so the recess opens only on its own face. Local +z is the wall's right side.
+    const t = wall.thickness;
+    const deep = Math.min(o.depth ?? 0.15, t - 0.005);
+    const toward = o.face === 'right' ? 1 : -1;
+    const inside = mats.inside ?? mats.frame;
+    const backT = t - deep;
+    addBox(o.width, o.height, backT, 0, 0, -toward * (deep / 2), inside);
+    const shelves = o.shelves ?? 0;
+    const board = 0.025;
+    for (let i = 1; i <= shelves; i++) {
+      const y = -o.height / 2 + (i * o.height) / (shelves + 1);
+      addBox(o.width, board, deep, 0, y, toward * (t / 2 - deep / 2), inside);
+    }
+  } else if (o.type === 'window') {
+    // A slim frame in the middle of the wall, so the wall's reveals show around it, holding
+    // one or two leaves, each with its grid of panes.
+    const frameD = Math.min(0.08, depth);
+    addBox(o.width, frameT, frameD, 0, o.height / 2 - frameT / 2, 0, mats.frame);
+    addBox(o.width, frameT, frameD, 0, -o.height / 2 + frameT / 2, 0, mats.frame);
+    addBox(frameT, o.height - 2 * frameT, frameD, -o.width / 2 + frameT / 2, 0, 0, mats.frame);
+    addBox(frameT, o.height - 2 * frameT, frameD, o.width / 2 - frameT / 2, 0, 0, mats.frame);
+    const leaves = o.leaves ?? (o.width > 1.0 ? 2 : 1);
+    const [across, up] = o.panes ?? [1, 1];
+    const innerW = o.width - 2 * frameT;
+    const innerH = o.height - 2 * frameT;
+    const leafW = innerW / leaves;
+    const sash = Math.min(0.04, leafW * 0.12, innerH * 0.12);
+    const bar = Math.min(0.022, sash);
+    const sashD = Math.min(0.045, frameD);
+    for (let l = 0; l < leaves; l++) {
+      const x = -innerW / 2 + leafW * (l + 0.5);
+      addBox(leafW, sash, sashD, x, innerH / 2 - sash / 2, 0, mats.frame);
+      addBox(leafW, sash, sashD, x, -innerH / 2 + sash / 2, 0, mats.frame);
+      addBox(sash, innerH - 2 * sash, sashD, x - leafW / 2 + sash / 2, 0, 0, mats.frame);
+      addBox(sash, innerH - 2 * sash, sashD, x + leafW / 2 - sash / 2, 0, 0, mats.frame);
+      const gw = leafW - 2 * sash;
+      const gh = innerH - 2 * sash;
+      for (let i = 1; i < across; i++) addBox(bar, gh, sashD * 0.8, x - gw / 2 + (i * gw) / across, 0, 0, mats.frame);
+      for (let j = 1; j < up; j++) addBox(gw, bar, sashD * 0.8, x, -gh / 2 + (j * gh) / up, 0, mats.frame);
+      addBox(gw, gh, 0.006, x, 0, 0, mats.glass);
+    }
   } else if (o.type === 'door') {
     addBox(o.width, frameT, depth, 0, o.height / 2 - frameT / 2, 0, mats.frame);
     addBox(frameT, o.height, depth, -o.width / 2 + frameT / 2, 0, 0, mats.frame);
     addBox(frameT, o.height, depth, o.width / 2 - frameT / 2, 0, 0, mats.frame);
-    // Door leaf, slightly open, hinged on the chosen jamb and swinging to the chosen side.
-    const leafW = o.width - 2 * frameT;
+    // One leaf, or a pair meeting in the middle, each hinged on its jamb and swinging to the
+    // chosen side.
+    const leaves = o.leaves ?? 1;
+    const leafW = (o.width - 2 * frameT) / leaves;
     const leafH = o.height - frameT;
-    const hingeSign = o.hinge === 'end' ? 1 : -1;
-    const pivot = new THREE.Group();
-    // Named and marked so other programs (Blender, viewers) can find the hinge and swing it.
-    pivot.name = `${o.id}:hinge`;
-    pivot.position.set(hingeSign * (leafW / 2), -frameT / 2, 0);
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafW, leafH, 0.04), mats.door);
-    leaf.position.set(-hingeSign * (leafW / 2), 0, 0);
-    pivot.add(leaf);
-    // Local +z is the wall's right side.
+    const leafT = 0.04;
+    // Local +z is the wall's right side. Unset, the leaf stands ajar so it reads as a door.
     const swingSign = o.swing === 'right' ? 1 : -1;
-    pivot.rotation.y = hingeSign * swingSign * -0.35;
-    pivot.userData = { hinge: { axis: 'y', openRadians: pivot.rotation.y } };
-    g.add(pivot);
+    const open = o.openDegrees !== undefined ? (o.openDegrees * Math.PI) / 180 : 0.35;
+    const hinges: Array<1 | -1> = leaves === 2 ? [-1, 1] : [o.hinge === 'end' ? 1 : -1];
+    hinges.forEach((hingeSign, i) => {
+      const pivot = new THREE.Group();
+      // Named and marked so other programs (Blender, viewers) can find the hinge and swing it.
+      pivot.name = i === 0 ? `${o.id}:hinge` : `${o.id}:hinge-${i + 1}`;
+      pivot.position.set(hingeSign * (leafW * (leaves === 2 ? 1 : 0.5)), -frameT / 2, 0);
+      // The handle is on the free edge: away from the hinge, which for a pair is where they meet.
+      const leaf = doorLeaf(leafW, leafH, leafT, o.panels ?? 0, mats.door, mats.metal ?? mats.frame, -hingeSign);
+      leaf.position.set(-hingeSign * (leafW / 2), 0, 0);
+      pivot.add(leaf);
+      pivot.rotation.y = hingeSign * swingSign * -open;
+      pivot.userData = { hinge: { axis: 'y', openRadians: pivot.rotation.y } };
+      g.add(pivot);
+    });
   }
   return g;
 }

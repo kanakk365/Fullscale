@@ -53,11 +53,14 @@ Stack choices are in `docs/DECISIONS.md`.
 ### Phase 3: your existing home from a scan (started)
 - [x] The `fullscale-capture/1` format (`docs/capture-format.md`) and an importer: scanned rooms become walls (room-side face exact, thickness a marked guess unless both sides were scanned), doors, windows, furniture and rooms, each with a scanned source and ±; tape checks compared and offered as fixes. Tested on synthetic scans.
 - [x] **Room builder** (`room-builder/`, Python 3.12, uv + Open3D, first version 2026-10-26): every depth frame merged into one surface, cut to the scanned rooms, coloured from the photos (visibility-checked, best views first, exposure evened out); written as `built/room.glb` with a report. The editor's 3D view shows it (**Scan** switch), placed by the capture's `toHome`. Tested on made-up rooms against the true shape and colours; run on the first real scans.
+- [x] Several scans of one room (2026-10-26): lined up with the room on import (relocalised, or by walls, doors and windows), checked against the model, photos used together; the room builder builds from all of them (`--with`). The app asks for detail photos (close-ups of prints, pictures and screens) and says what an extra scan is for.
+- [x] Real pictures from the photos (2026-10-26): `view_photo` and `texture_from_photo`; materials with pictures in the editor and in renders; door leaves and panels, window panes; rounded, more lifelike catalogue shapes (bed with pillows, ergonomic chair, slim monitors, laptops, sofas); screens that switch on; the person's own models used in renders.
 - [ ] Room builder, next: flat walls, floor and ceiling at the scanned positions (keeping their colours); furniture and objects cut out as separate, movable pieces; colour at photo resolution (textures) instead of per point; a lighter file for big homes.
 - [ ] Fit LiDAR planes to tighten the imported walls, floor and ceiling; find openings; join rooms.
 - [ ] Accuracy report across held-out tape checks.
 - [ ] Grey-card calibration of the photo colours (the room builder already colours from photos, with white balance locked per room).
-- [ ] Matched-camera comparison: render the model from a photo's camera next to the photo.
+- [ ] Matched-camera comparison as a tool: render the model from a photo's camera next to the photo (done by hand for the first replica, 2026-10-26; needs a `compare_with_photo` agent tool).
+- [ ] Replica building (started 2026-10-26): detailed catalogue shapes (office chair, desk with drawers, monitor, laptop, wall AC, clothes rail, picture frame); door and window materials (leaf, frame, tinted glass); niches (alcoves with built-in shelves); doors shown shut or open; every material says what it's made of, and Blender renders give each kind a real surface (tiles with grout at their size, wood grain, fabric weave and sheen, plaster, metal, transmissive glass) with softened edges; each render saves its Blender file. Real lights (2026-10-26): bulbs, tube lights, ceiling and hanging lights, lamps and a ceiling fan in the catalogue, each light with its colour and brightness, lighting renders by `day`, `evening` or `night` with the sun through the windows and phone-like exposure. Next: agent tools to see a capture's photos and the objects found in it; textures cut from photos (bedding prints, posters, screens); proper 3D models for furniture (CC0, or scanned with the phone); soft, draped fabrics; items that rest on or in others without counting as overlaps (things on shelves, a blanket on a bed).
 
 ### Phase 4: capture on every phone (started)
 - [x] **iPhone, CaptureKit** (Swift package, tested on the Mac): the format, frame and photo selection, still rules, tracking and budget rules, tape checks (same cases as the studio), depth and mesh encoding, the crash-safe bundle writer and checker.
@@ -70,7 +73,8 @@ Stack choices are in `docs/DECISIONS.md`.
 ### Phase 5: photo-real and Blender (both Three.js and Blender are required)
 - [x] Blender add-on (GPL, `blender/`): connects out to the studio, opens the home as real objects, syncs furniture moves, turns, colours and deletions both ways; walls locked. Pure parts tested; the Blender-side code not yet run in Blender.
 - [x] Photo-real stills: `render_photoreal` runs Blender without a window on our GLB, with presets and a dry run.
-- [ ] Run and tune the add-on and renders in a real Blender (not installed here yet).
+- [x] Renders run and tuned in a real Blender (5.2.3): real lights, daylight through windows, phone-like exposure (2026-10-26).
+- [ ] Run the add-on's live link in a real Blender.
 - [ ] Splat: our converter (poses + LiDAR seeds) → msplat (Mac) → SOG → Spark layer in the viewer.
 
 ## Out of scope for now

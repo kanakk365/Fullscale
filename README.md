@@ -22,11 +22,12 @@ Scan a room with your phone, or start from a floor plan or a blank page, then re
 - **The editor** (`apps/editor`): a 2D plan and a 3D view, live with the studio. Draw walls with snapping and typed lengths ("3.5", "350 cm", "11' 6\""); drag out rooms; put doors and windows on walls; place furniture that stands against walls; drag, nudge, turn and delete; click a dimension and type a length; paint walls, floors and furniture; undo and redo.
 - **Rooms follow their walls.** Draw four walls and a room appears; move a wall and the room grows; add a wall across it and it splits. Walls drawn next to each other join and share.
 - **Every number says where it came from**: scanned (with ±), typed by you, from a floor plan, the maker's size, a catalogue default, or a guess. Edits keep this honest, so a guess never passes as a measurement.
-- **AI agents, through MCP** (`apps/server`): 40 tools to look (plan pictures with scale, 3D views, photo-real renders), measure (with ±), check "will it fit?" (saying what was and wasn't checked), build, furnish and paint. Every edit answers with what really changed; refusals say why and what would work. Agents undo only their own edits, and see what you changed and selected.
+- **AI agents, through MCP** (`apps/server`): 42 tools to look (plan pictures with scale, 3D views, photo-real renders, the scans' photos), measure (with ±), check "will it fit?" (saying what was and wasn't checked), build, furnish and paint. Every edit answers with what really changed; refusals say why and what would work. Agents undo only their own edits, and see what you changed and selected.
 - **Phone scans** (`packages/capture`): the `fullscale-capture/1` format and an importer that turns a scan into walls, doors, windows, rooms and furniture, squared to the plan, and compares your tape checks with it.
 - **Floor plan pictures**: lay one under a level and scale it from lengths you know; two lengths that disagree by over 2% are refused (the plan may not be to scale).
 - **Room builder** (`room-builder/`, Python): turns a scan into a detailed 3D model with the photos' colours and everything in the room, small things too. The editor's 3D view shows it next to the editable model.
-- **Blender** (`blender/`): an add-on that opens your home as real objects and keeps it in step both ways, and the script behind photo-real renders.
+- **Your room's own look** (`apps/server/src/photos.ts`): agents look through the scans' photos, see what each shows and where it was taken from, and cut real pictures out of them (a bedsheet's print, the photos in your frames, what's on your screens), straightened and at their real size, to put on the model. Several scans of one room are lined up and used together.
+- **Blender** (`blender/`): an add-on that opens your home as real objects and keeps it in step both ways, and the script behind photo-real renders, which uses your own 3D models on your computer and is lit by your room's own lights (bulbs, tube lights, lamps, each with its colour and brightness) and by daylight through its windows, by day, evening or night, and exposed the way a phone camera would.
 - **iPhone capture** (`apps/capture-ios`): scans rooms with LiDAR and Apple's room scanner, keeps sharp photos (and full-resolution ones) with one white balance per room, takes grey-card photos and tape checks, and writes a crash-safe capture folder. Its rules are tested on the Mac, and it runs on an iPhone.
 - **Your own furniture models**: put downloaded `.glb`/`.gltf` files in `data/models/`; items use them at their true size. They never leave your computer and are never exported.
 
@@ -47,6 +48,8 @@ claude mcp add fullscale -- npm run --silent --prefix /path/to/Fullscale mcp
 ```
 
 Apps that connect over HTTP can use `http://127.0.0.1:4747/mcp` with the token from `npx tsx apps/server/src/cli.ts token` as a bearer token.
+
+Give your agent the **Fullscale skill** too: [`skills/fullscale/SKILL.md`](skills/fullscale/SKILL.md) explains how to turn a scan into a replica, redesign, check fit, and when to stop and ask you instead of guessing (is that a curtain or a painted wall? which colour is right?). In Claude Code, copy the `skills/fullscale` folder into `~/.claude/skills/`; other agents can read the file as instructions. The short version of these rules reaches every agent automatically when it connects.
 
 Your homes are saved in `data/homes/` (git-ignored). `npm run studio -- --home <folder>` opens another one.
 
@@ -79,6 +82,7 @@ npm run check         # lint, types and tests
 | `apps/capture-ios` | The iPhone capture app |
 | `room-builder/` | Turns a scan into a detailed, coloured 3D model (Python, Open3D) |
 | `blender/` | The Blender add-on and render script (GPL) |
+| `skills/fullscale/` | The skill that teaches an agent to work with Fullscale |
 | `fixtures/` | Test cases shared by TypeScript, Swift and (later) Kotlin |
 | `docs/` | The plan, decisions and the capture format |
 

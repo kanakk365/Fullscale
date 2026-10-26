@@ -24,6 +24,8 @@ final class Recorder {
     private(set) var photos = 0
     private(set) var stills = 0
     private(set) var cards = 0
+    /// Close-ups taken with the Detail button in the room being scanned.
+    private(set) var details = 0
     private(set) var keyframes = 0
     private(set) var trackingGood = false
     /// What to do about tracking, when it is not good.
@@ -64,6 +66,9 @@ final class Recorder {
     private var tracking = TrackingGate()
     private var stillRequests = StillRequests()
     private var stillFor: PhotoCandidate?
+    /// The Detail button was tapped; taken as soon as no other still is on its way.
+    private var detailRequested = false
+    private var detailOnItsWay = false
     private var previous: (pose: Pose, t: Double)?
     /// The camera's last step, to predict a still's blur from how fast the camera moves.
     private var lastStep: (from: (pose: Pose, t: Double), to: (pose: Pose, t: Double))?
@@ -160,6 +165,7 @@ final class Recorder {
         roomRecord = RoomRecord(id: id, name: entry.name, startedAt: entry.startedAt)
         selector = PhotoSelector()
         scanned = []
+        details = 0
         liveRoom = nil
         areas = MeshAreas()
         roomStartedAt = Date()
@@ -184,7 +190,8 @@ final class Recorder {
             floorFound: !floor.isEmpty || areas.floorM2 > 1,
             ceilingSeen: reference.map { areas.ceilingM2 / $0 },
             photos: roomRecord?.counts.photos ?? 0,
-            hasScanner: host.hasLiDAR
+            hasScanner: host.hasLiDAR,
+            details: details
         )
         let next = ScanProgress.judge(seen)
         if next != progress { progress = next }
@@ -300,6 +307,61 @@ final class Recorder {
         cardRequested = true
     }
 
+    /// Take a full-resolution close-up now: a bedsheet's print, a photo in a frame, a screen.
+    /// The computer cuts these out and puts them on the model, so they're kept as taken.
+    func takeDetailPhoto() {
+        guard case .scanning = phase, !detailOnItsWay else { return }
+        detailRequested = true
+        if stillFor == nil { startDetail() }
+    }
+
+    private func startDetail() {
+        detailRequested = false
+        detailOnItsWay = true
+        host.captureStill { [weak self] still, error in self?.detailArrived(still, error: error) }
+    }
+
+    private func detailArrived(_ still: StillFrame?, error: (any Error)?) {
+        detailOnItsWay = false
+        guard let still, let room = scanningRoom else {
+            problem = "The detail photo could not be taken\(error.map { ": \($0.localizedDescription)" } ?? ""). Try again."
+            return
+        }
+        let blur = lastStep.map { predictedBlurPx(fx: still.intrinsics.fx, exposureS: still.exposureS, from: $0.from, to: $0.to) } ?? 0
+        counter += 1
+        let id = "d\(counter)"
+        let reading = camera.reading(exif: still.exif)
+        let record = PhotoRecord(
+            id: id, file: "photos/\(id).jpg", room: room.id, kind: .detail, t: still.t, width: still.width, height: still.height,
+            pose: still.pose, intrinsics: still.intrinsics, tracking: .normal, blurPx: blur,
+            camera: .init(exposureS: still.exposureS, iso: reading?.iso ?? 0, evOffset: still.evOffset, whiteBalanceGains: reading?.gains ?? [], whiteBalanceLocked: reading?.whiteBalanceLocked ?? false, exposureLocked: reading?.exposureLocked ?? false)
+        )
+        guard record.isUsable else {
+            problem = "The detail photo came out unusable. Hold still and try again."
+            return
+        }
+        waitingWrites += 1
+        encode.async { [weak self] in
+            let jpeg = FrameData.jpeg(still.image, quality: 0.95)
+            Task { @MainActor in
+                guard let self else { return }
+                self.waitingWrites -= 1
+                guard let jpeg else {
+                    self.problem = "The detail photo could not be saved. Try again."
+                    return
+                }
+                self.store("a detail photo", { writer in
+                    try await writer.write(jpeg, at: record.file)
+                    try await writer.append(record, to: "photos/index.jsonl")
+                    try await writer.updateManifest { $0.counts.photos += 1 }
+                }, saved: { [weak self] in
+                    self?.details += 1
+                    self?.updateProgress()
+                })
+            }
+        }
+    }
+
     func endCapture() async {
         areaTask?.cancel()
         host.stop()
@@ -371,6 +433,7 @@ final class Recorder {
             cardRequested = false
             writeCard(frame, pose: pose, room: room)
         }
+        if detailRequested, stillFor == nil, !detailOnItsWay { startDetail() }
 
         let budget = CaptureBudget.current(thermal: lastThermal, secondsSinceMemoryWarning: lastMemoryWarning.map { -$0.timeIntervalSinceNow }, photosInRoom: roomRecord?.counts.photos ?? 0)
         let easing = Self.notice(for: budget, thermal: lastThermal)

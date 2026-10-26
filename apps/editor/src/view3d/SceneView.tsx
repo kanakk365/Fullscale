@@ -11,6 +11,7 @@ import { select } from '../app/actions.ts';
 import { setState, shownHome, useEditor } from '../app/store.ts';
 import { cameraFor, frameCentre } from './camera.ts';
 import { useModels } from './models.ts';
+import { picture } from './pictures.ts';
 import { useScans, type Scans } from './scans.ts';
 
 /** The live view's lens; framing uses the same, so the home fills the view. */
@@ -81,7 +82,7 @@ function HomeModel({ home, level }: { home: Home; level: string }) {
   const cache = useMemo(() => new MaterialCache(), []);
   const models = useModels(home);
   const group = useMemo(() => {
-    const opts: BuildOptions = { highlight: selection, levels: [level], models: (item) => (item.model ? models.get(item.model.file)?.clone() : undefined) };
+    const opts: BuildOptions = { highlight: selection, levels: [level], models: (item) => (item.model ? models.get(item.model.file)?.clone() : undefined), pictures: picture };
     return buildHomeScene(home, cache, opts);
   }, [home, level, selection, models, cache]);
   useEffect(() => () => disposeScene(group), [group]);

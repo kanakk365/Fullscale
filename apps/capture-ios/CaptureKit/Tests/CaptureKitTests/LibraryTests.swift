@@ -128,6 +128,11 @@ struct RoomProgressTests {
         #expect(enough.complete)
         #expect(enough.next == .morePhotos)
         seen.photos = 40
+        let details = ScanProgress.judge(seen)
+        #expect(details.complete)
+        #expect(details.next == .detailPhotos)
+        #expect(details.items.first { $0.topic == .details }?.state == .todo)
+        seen.details = 3
         let done = ScanProgress.judge(seen)
         #expect(done.next == .done)
         #expect(done.fraction == 1)
@@ -136,7 +141,7 @@ struct RoomProgressTests {
 
     @Test("lets a room that opens onto another finish")
     func openPlan() {
-        let seen = ScanProgress.Seen(walls: Array(room().prefix(3)), floorFound: true, ceilingSeen: 0.8, photos: 40, hasScanner: true)
+        let seen = ScanProgress.Seen(walls: Array(room().prefix(3)), floorFound: true, ceilingSeen: 0.8, photos: 40, hasScanner: true, details: 3)
         let progress = ScanProgress.judge(seen)
         #expect(progress.complete)
         #expect(progress.next == .nearlyDone)
@@ -145,7 +150,7 @@ struct RoomProgressTests {
     @Test("counts only photos on a phone without a scanner")
     func photosOnly() {
         let progress = ScanProgress.judge(.init(walls: [], floorFound: false, ceilingSeen: nil, photos: 15, hasScanner: false))
-        #expect(progress.items.map(\.topic) == [.photos])
+        #expect(progress.items.map(\.topic) == [.photos, .details])
         #expect(progress.fraction == 0.5)
         #expect(!progress.complete)
     }

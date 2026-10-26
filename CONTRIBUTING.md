@@ -39,6 +39,7 @@ The room builder's tests need [uv](https://docs.astral.sh/uv/), which fetches Py
 - Test behaviour through a package's public API, with exact numbers for geometry and measurements.
 - Name tests as sentences about behaviour ("splits a room in two where a wall crosses it").
 - No real sleeps or clocks in unit tests: inject the clock.
+- **Agents** learn Fullscale from the studio's short instructions (`apps/server/src/mcp.ts`, sent on connect) and the skill in `skills/fullscale/SKILL.md`. Change them when tools change; a test fails if the skill names a tool that doesn't exist. Teach agents to ask the person when a scan leaves them unsure, never to guess silently.
 - Behaviour that must match across languages (reading lengths, grading tape checks) lives in `fixtures/` and is tested from TypeScript, Swift and Kotlin alike.
 
 ## Pull requests

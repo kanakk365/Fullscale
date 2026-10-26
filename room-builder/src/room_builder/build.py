@@ -19,7 +19,7 @@ import numpy as np
 import open3d as o3d
 
 from . import __version__
-from .capture import CaptureError, read_capture
+from .capture import CaptureError, read_aligned, read_capture
 from .colour import ColourSettings, colour_from_photos
 from .fuse import FuseSettings, drop_small_pieces, fuse, keep_inside
 from .geometry import room_boxes
@@ -48,6 +48,8 @@ class BuildReport:
     photos_used: int
     seconds: float
     problems: list[str]
+    # other scans of the same room whose depth and photos were put in
+    with_captures: list[str] = field(default_factory=list)
 
 
 def build(
@@ -55,10 +57,17 @@ def build(
     out_folder: str | Path | None = None,
     settings: BuildSettings | None = None,
     say: Callable[[str], None] = lambda _: None,
+    with_folders: list[str | Path] | None = None,
 ) -> BuildReport:
     settings = settings or BuildSettings()
     started = time.monotonic()
     capture = read_capture(capture_folder)
+    extras = [read_aligned(capture, folder) for folder in with_folders or []]
+    for extra in extras:
+        say(f"With capture {extra.id}: {len(extra.frames)} depth frames, {len(extra.photos)} photos.")
+        capture.frames.extend(extra.frames)
+        capture.photos.extend(extra.photos)
+        capture.problems.extend(extra.problems)
     out = Path(out_folder) if out_folder else capture.folder / "built"
     out.mkdir(parents=True, exist_ok=True)
     say(f"Capture {capture.id}: {len(capture.frames)} depth frames, {len(capture.photos)} photos, {len(capture.walls)} scanned walls.")
@@ -101,6 +110,7 @@ def build(
         photos_used=coloured.photos_used,
         seconds=round(time.monotonic() - started, 1),
         problems=problems,
+        with_captures=[extra.id for extra in extras],
     )
     _write_report(out / "build.json", report, settings)
     say(

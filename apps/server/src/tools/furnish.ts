@@ -2,10 +2,12 @@
 import {
   addItem,
   CATALOG_BY_ID,
+  ceilingHeight,
   checkFit,
   EditError,
   MaterialSchema,
   placeAgainstWall,
+  pointInPolygon,
   roomCentre,
   sourceOf,
   type BaseOperation,
@@ -50,12 +52,21 @@ const Placement = {
   room: Id.optional().describe('put it in the middle of this room (when no position or wall is given)'),
 };
 
+const LightInput = z
+  .object({
+    on: z.boolean().optional(),
+    kelvin: z.number().int().min(1500).max(10000).optional().describe('colour: about 2700 warm yellow, 4000 neutral white, 6500 cool daylight white'),
+    lumens: z.number().positive().max(50000).optional().describe('brightness; a 9 W LED bulb gives about 800'),
+  })
+  .describe('lights only (the catalogue’s lighting group): on or off, and the colour and brightness of the real one');
+
 const ItemInput = z.object({
   catalog: z.string().min(1).max(80).describe('catalogue id (search_catalog), or "box" for a plain box'),
   name: z.string().min(1).max(80).optional(),
   size: Size.optional().describe('the real [width, height, depth]; default the catalogue size'),
   ...Placement,
   model: ModelInput.optional(),
+  light: LightInput.optional(),
 });
 
 /** Turn a model input into a model reference, reading the file's size. */
@@ -73,8 +84,31 @@ function modelRef(ctx: ToolContext, input: z.output<typeof ModelInput>): ModelRe
   };
 }
 
-/** Where an item goes: by wall, by position, or in the middle of a room. */
+/** Where an item goes: by wall, by position, or in the middle of a room. Things that hang
+ *  from the ceiling (fans, ceiling lights) go up to the ceiling unless an elevation is given. */
 function poseFor(
+  home: Home,
+  q: {
+    size: [number, number, number];
+    position?: [number, number];
+    elevation?: number;
+    rotation?: number;
+    against?: z.output<typeof Placement.against>;
+    room?: string;
+    hang?: { level: string };
+  },
+): { position: Vec3; rotation: number } {
+  const pose = placeAt(home, q);
+  if (q.hang && q.elevation === undefined) {
+    const level = home.levels.find((l) => l.id === q.hang!.level) ?? home.levels[0]!;
+    const room = home.rooms.find((r) => r.level === level.id && pointInPolygon([pose.position[0], pose.position[2]], r.polygon));
+    const ceiling = room ? ceilingHeight(home, room) : level.height;
+    pose.position = [pose.position[0], Math.max(0, Math.round((ceiling - q.size[1]) * 1000) / 1000), pose.position[2]];
+  }
+  return pose;
+}
+
+function placeAt(
   home: Home,
   q: { size: [number, number, number]; position?: [number, number]; elevation?: number; rotation?: number; against?: z.output<typeof Placement.against>; room?: string },
 ): { position: Vec3; rotation: number } {
@@ -116,7 +150,7 @@ export const addItems = defineTool({
       const entry = CATALOG_BY_ID.get(item.catalog);
       if (!entry) throw new EditError('not_found', `Item ${index + 1}: no catalogue entry "${item.catalog}". Try search_catalog, or "box" for a plain box.`, { index, catalog: item.catalog });
       const size = item.size ?? entry.size;
-      const pose = poseFor(scratch, { ...item, size });
+      const pose = poseFor(scratch, { ...item, size, ...(entry.ceiling ? { hang: { level: q.level ?? scratch.levels[0]!.id } } : {}) });
       const fit = checkFit(scratch, { size, position: pose.position, rotation: pose.rotation, ...(q.level ? { level: q.level } : {}), ...(q.clearance ? { clearance: q.clearance } : {}) });
       if (!fit.fits && !q.force) {
         refused.push({ index, catalog: item.catalog, problems: fit.problems, ...(fit.suggestion ? { suggestion: fit.suggestion } : {}) });
@@ -131,6 +165,7 @@ export const addItems = defineTool({
         ...(item.name ? { name: item.name } : {}),
         ...(item.size ? { size: item.size } : {}),
         ...(item.model ? { model: modelRef(ctx, item.model) } : {}),
+        ...(item.light ? { light: item.light } : {}),
         source: { kind: ctx.by },
       };
       ops.push(op);
@@ -156,13 +191,14 @@ export const updateItem = defineTool({
   name: 'update_item',
   title: 'Change an item',
   description:
-    'Move, turn, resize, rename, lock or unlock an item, or give it one of the user’s own models (null goes back to the catalogue shape). A new pose is checked like add_items; force places it anyway.',
+    'Move, turn, resize, rename, lock or unlock an item, give it one of the user’s own models (null goes back to the catalogue shape), or switch a light on or off and set its colour and brightness (null goes back to the catalogue’s). A new pose is checked like add_items; force places it anyway.',
   input: z.object({
     id: Id,
     name: z.string().min(1).max(80).optional(),
     size: Size.optional(),
     ...Placement,
     model: ModelInput.nullable().optional(),
+    light: LightInput.nullable().optional(),
     locked: z.boolean().optional(),
     force: z.boolean().optional().describe('move it even where it doesn’t fit'),
     ...WriteOptions,
@@ -203,21 +239,27 @@ export const updateItem = defineTool({
       ...strip({ name: q.name, size: q.size, locked: q.locked }),
       ...(pose ? { position: pose.position, rotation: pose.rotation } : {}),
       ...(q.model === null ? { model: null } : q.model ? { model: modelRef(ctx, q.model) } : {}),
+      ...(q.light !== undefined ? { light: q.light } : {}),
     };
     return receiptResult(write(ctx, op, q));
   },
 });
 
-const PaintTarget = z.union([
+export const PaintTarget = z.union([
   z.object({ wall: Id, face: z.enum(['left', 'right', 'both']) }),
   z.object({ room: Id, surface: z.enum(['walls', 'floor', 'ceiling']) }),
   z.object({ item: Id, part: z.string().max(40).optional().describe('a named part like "body" or "legs"; default the main part') }),
+  z.object({
+    opening: Id,
+    part: z.enum(['frame', 'leaf', 'glass']).optional().describe('frame, a door’s leaf or a window’s glass; default a door’s leaf or a window’s frame'),
+  }),
 ]);
 
 export const paint = defineTool({
   name: 'paint',
   title: 'Paint and finish',
-  description: 'Give surfaces a colour or a material: wall faces, a room’s walls, floor or ceiling, or part of an item. A colour like "#9caf88" makes (or reuses) a paint.',
+  description:
+    'Give surfaces a colour or a material: wall faces, a room’s walls, floor or ceiling, part of an item, or a door’s leaf, a window’s glass or either one’s frame. A colour like "#9caf88" makes (or reuses) a paint; for tinted glass make a glass material with upsert_material (opacity below 1) and give its id.',
   input: z.object({
     targets: z.array(PaintTarget).min(1).max(50),
     color: z

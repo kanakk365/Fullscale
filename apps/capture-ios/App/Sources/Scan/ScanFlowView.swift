@@ -25,6 +25,8 @@ struct ScanFlowView: View {
     @State private var confirmClose = false
     @State private var choosingNext = false
     @State private var relocalizingSince = Date()
+    /// The card saying what an extra scan of a room is for, until it is put away.
+    @State private var showFocus = true
 
     var body: some View {
         ZStack {
@@ -214,6 +216,7 @@ struct ScanFlowView: View {
         VStack(spacing: 10) {
             topBar
             coaching
+            if current?.adds == true, showFocus { focusCard }
             HStack(alignment: .top) {
                 if let notice = recorder.notice {
                     Text(notice).font(.caption).foregroundStyle(.white).padding(8).background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
@@ -274,6 +277,28 @@ struct ScanFlowView: View {
         .animation(.easeInOut, value: text)
     }
 
+    /// An extra scan of a room is for detail: the walls are known already.
+    private var focusCard: some View {
+        let number = (store.library.space(request.space)?.rooms.first { $0.id == current?.room }?.scans.count ?? 1) + 1
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Scan \(number) of \(current?.name ?? "this room"): add detail").font(.subheadline.weight(.semibold))
+                Spacer()
+                Button { withAnimation { showFocus = false } } label: { Image(systemName: "xmark").font(.caption.weight(.bold)) }
+                    .accessibilityLabel("Put this away")
+            }
+            Label("Walk close to furniture and along the shelves", systemImage: "figure.walk")
+            Label("Look up at the lights, the fan and the ceiling", systemImage: "lightbulb")
+            Label("Tap Detail for patterns, pictures and screens", systemImage: "camera.macro")
+        }
+        .font(.footnote)
+        .foregroundStyle(.white)
+        .padding(14)
+        .background(.ultraThinMaterial.opacity(0.85), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .environment(\.colorScheme, .dark)
+        .transition(.opacity)
+    }
+
     private var liveModel: some View {
         let size: CGFloat = bigModel ? 260 : 150
         return RoomModelView(room: recorder.liveRoom, version: recorder.roomVersion, phone: recorder.cameraTransform)
@@ -293,7 +318,7 @@ struct ScanFlowView: View {
         VStack(spacing: 12) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(recorder.progress.items) { item in ChecklistChip(item: item, photos: recorder.photos) }
+                    ForEach(recorder.progress.items) { item in ChecklistChip(item: item, photos: recorder.photos, details: recorder.details) }
                     if let room = recorder.liveRoom, room.doors.count + room.windows.count > 0 {
                         Text("\(room.doors.count) doors · \(room.windows.count) windows")
                             .font(.caption.weight(.semibold)).foregroundStyle(.white)
@@ -308,6 +333,13 @@ struct ScanFlowView: View {
                     Text("\(recorder.photos) photos · \(recorder.keyframes) depth").font(.caption).foregroundStyle(.white.opacity(0.75)).monospacedDigit()
                 }
                 Spacer()
+                Button { recorder.takeDetailPhoto() } label: {
+                    Label("Detail", systemImage: "camera.macro").font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.bordered)
+                .tint(.white)
+                .controlSize(.large)
+                .accessibilityHint("Takes a sharp close-up of a pattern, picture or screen, for the computer to copy onto the model.")
                 Button {
                     if recorder.progress.complete { Task { await finish() } } else { confirmFinish = true }
                 } label: {

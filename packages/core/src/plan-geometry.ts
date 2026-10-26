@@ -138,7 +138,8 @@ function wallShapes(home: Home, w: Wall, join: WallJoin | undefined, out: PlanPr
 
   const solid: Array<[number, number]> = [];
   let u = 0;
-  for (const o of ops) {
+  // A niche is a recess, not a gap: the wall stays solid across it on the plan.
+  for (const o of ops.filter((x) => x.type !== 'niche')) {
     if (o.offset > u) solid.push([u, o.offset]);
     u = Math.max(u, o.offset + o.width);
   }
@@ -163,6 +164,11 @@ function wallShapes(home: Home, w: Wall, join: WallJoin | undefined, out: PlanPr
     } else if (o.type === 'opening') {
       // A plain opening is a gap in the wall; its outline keeps it visible and pickable.
       out.push({ kind: 'polygon', role: 'opening', points: [at(p0, off.left), at(p1, off.left), at(p1, off.right), at(p0, off.right)], id: o.id });
+    } else if (o.type === 'niche') {
+      // The recess, drawn over the solid wall from the face it opens on.
+      const faceAt = o.face === 'right' ? off.right : off.left;
+      const back = faceAt + (o.face === 'right' ? 1 : -1) * Math.min(o.depth ?? 0, Math.abs(off.left - off.right));
+      out.push({ kind: 'polygon', role: 'opening', points: [at(p0, faceAt), at(p1, faceAt), at(p1, back), at(p0, back)], id: o.id });
     } else {
       // The leaf stands open at 90° on the side it swings to, with its sweep drawn as an arc.
       const hingeAlong = o.hinge === 'end' ? p1 : p0;

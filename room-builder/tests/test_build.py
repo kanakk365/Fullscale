@@ -93,3 +93,55 @@ class BuildRoomTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SeveralScansTest(unittest.TestCase):
+    """Two scans of one room, the second in its own coordinates, lined up and built together."""
+
+    def test_a_second_scan_lined_up_adds_its_depth_and_photos(self):
+        with tempfile.TemporaryDirectory() as temp:
+            views = synthetic.standard_views()
+            main = synthetic.write_capture(Path(temp) / "20260101T000000Z-MAIN", views=views[::2])
+            extra = synthetic.write_capture(Path(temp) / "20260101T000100Z-MORE", views=views[1::2])
+            # The second scan's world is turned and moved; aligned.json says how to undo that.
+            angle = np.radians(30)
+            to_main = np.eye(4)
+            to_main[:3, :3] = [[np.cos(angle), 0, np.sin(angle)], [0, 1, 0], [-np.sin(angle), 0, np.cos(angle)]]
+            to_main[:3, 3] = [0.7, 0.0, -1.2]
+            _move_world(extra, np.linalg.inv(to_main))
+            (extra / "built").mkdir()
+            (extra / "built" / "aligned.json").write_text(json.dumps({"format": "fullscale-alignment/1", "to": main.name, "matrix": to_main.T.reshape(-1).tolist()}))
+
+            report = build(main, settings=BuildSettings(fuse=FuseSettings(voxel_m=0.02)), with_folders=[extra])
+            self.assertEqual(report.with_captures, [extra.name])
+            self.assertEqual(report.frames_used, len(views))
+            document, binary = read_glb(main / "built" / "room.glb")
+            attributes = document["meshes"][0]["primitives"][0]["attributes"]
+            points = _accessor(document, binary, attributes["POSITION"], "<f4", 3).astype(np.float64)
+            self.assertLess(np.median(synthetic.nearest_surface_distance(points)), 0.003)
+
+    def test_a_scan_not_lined_up_is_refused(self):
+        from room_builder.capture import CaptureError
+
+        with tempfile.TemporaryDirectory() as temp:
+            main = synthetic.write_capture(Path(temp) / "20260101T000000Z-MAIN")
+            extra = synthetic.write_capture(Path(temp) / "20260101T000100Z-MORE")
+            with self.assertRaises(CaptureError) as caught:
+                build(main, with_folders=[extra])
+            self.assertEqual(caught.exception.code, "not_aligned")
+
+
+def _move_world(folder: Path, matrix: np.ndarray) -> None:
+    """Rewrite a capture's poses and walls as if its world were moved by `matrix`."""
+    for index in (folder / "frames" / "index.jsonl", folder / "photos" / "index.jsonl"):
+        records = [json.loads(line) for line in index.read_text().splitlines() if line.strip()]
+        for r in records:
+            pose = np.asarray(r["pose"]).reshape(4, 4).T
+            r["pose"] = (matrix @ pose).T.reshape(-1).tolist()
+        index.write_text("".join(json.dumps(r) + "\n" for r in records))
+    plan = folder / "rooms" / "r1" / "roomplan.json"
+    layout = json.loads(plan.read_text())
+    for wall in layout["walls"]:
+        t = np.asarray(wall["transform"]).reshape(4, 4).T
+        wall["transform"] = (matrix @ t).T.reshape(-1).tolist()
+    plan.write_text(json.dumps(layout))

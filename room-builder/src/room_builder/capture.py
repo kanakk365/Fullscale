@@ -9,14 +9,14 @@ from __future__ import annotations
 
 import json
 import zlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
 
 FORMAT = "fullscale-capture/1"
 # Photos that show the room as it is. Card and tape photos have a hand or a card in front.
-ROOM_PHOTO_KINDS = ("auto", "manual", "still")
+ROOM_PHOTO_KINDS = ("auto", "manual", "still", "detail")
 
 
 class CaptureError(Exception):
@@ -125,6 +125,41 @@ def read_capture(folder: str | Path) -> Capture:
     for room in manifest.get("rooms", []):
         capture.walls.extend(_walls(folder, room, capture.problems))
     return capture
+
+
+def read_aligned(main: Capture, folder: str | Path) -> Capture:
+    """Another scan of the same room, moved into the main capture's coordinates so their depth
+    and photos can be put together. Scans the phone carried on from the main one (relocalized)
+    already share its coordinates; others are lined up by the studio when imported as another
+    scan of the room, which writes `built/aligned.json`."""
+    extra = read_capture(folder)
+    aligned = extra.folder / "built" / "aligned.json"
+    manifest = json.loads((extra.folder / "manifest.json").read_text())
+    adds_to = {(r.get("addsTo") or {}).get("capture") for r in manifest.get("rooms", [])}
+    if aligned.is_file():
+        try:
+            document = json.loads(aligned.read_text())
+            matrix = pose_matrix(document["matrix"])
+        except (json.JSONDecodeError, KeyError, ValueError) as err:
+            raise CaptureError("bad_alignment", f"{aligned} can't be read ({err}); import the scan into the home again.") from err
+        if document.get("to") != main.id:
+            raise CaptureError("not_aligned", f"Capture {extra.id} is lined up with {document.get('to')}, not {main.id}. Build with that capture first.")
+    elif main.id in adds_to and (manifest.get("alignment") or {}).get("method") == "relocalized":
+        matrix = np.eye(4)
+    else:
+        raise CaptureError(
+            "not_aligned",
+            f"Capture {extra.id} isn't lined up with {main.id}. Import it into the home as another scan of the room "
+            "(import_capture with room), which lines it up, then build again.",
+        )
+    return Capture(
+        folder=extra.folder,
+        id=extra.id,
+        frames=[replace(f, pose=matrix @ f.pose) for f in extra.frames],
+        photos=[replace(p, pose=matrix @ p.pose) for p in extra.photos],
+        walls=[replace(w, transform=matrix @ w.transform) for w in extra.walls],
+        problems=[f"{extra.id}: {p}" for p in extra.problems],
+    )
 
 
 def read_depth(frame: DepthFrame) -> tuple[np.ndarray, np.ndarray | None]:

@@ -17,6 +17,7 @@ export const PaintTargetSchema = z.union([
   z.strictObject({ wall: IdSchema, face: z.enum(['left', 'right', 'both']) }),
   z.strictObject({ room: IdSchema, surface: z.enum(['walls', 'floor', 'ceiling']) }),
   z.strictObject({ item: IdSchema, part: z.string().optional() }),
+  z.strictObject({ opening: IdSchema, part: z.enum(['frame', 'leaf', 'glass']).optional() }),
 ]);
 
 export type PaintTarget = z.infer<typeof PaintTargetSchema>;
@@ -31,7 +32,7 @@ function paintFor(home: Home, color: string, name?: string): string {
   return id;
 }
 
-/** Apply a material (by id) or a colour to a wall face, a room's surfaces or an item. */
+/** Apply a material (by id) or a colour to a wall face, a room's surfaces, an item, or part of a door or window. */
 export const paint = defineCommand(
   z.strictObject({
     target: PaintTargetSchema,
@@ -60,6 +61,13 @@ export const paint = defineCommand(
         }
         for (const f of faces) find(home, 'walls', f.wall).materials[f.face] = id;
       }
+    } else if ('opening' in target) {
+      const opening = find(home, 'openings', target.opening);
+      // A door's leaf or a window's frame unless a part is named.
+      const part = target.part ?? (opening.type === 'door' ? 'leaf' : 'frame');
+      if (part === 'leaf' && opening.type !== 'door') throw new EditError('invalid_input', `"${opening.id}" is a ${opening.type}; only doors have a leaf.`, { id: opening.id });
+      if (part === 'glass' && opening.type !== 'window') throw new EditError('invalid_input', `"${opening.id}" is a ${opening.type}; only windows have glass.`, { id: opening.id });
+      opening.materials = { ...opening.materials, [part]: id };
     } else {
       const item = find(home, 'items', target.item);
       const parts = target.part ? [target.part] : catalogEntry(item.catalog).parts.slice(0, 1);

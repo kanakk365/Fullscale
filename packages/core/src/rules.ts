@@ -28,7 +28,10 @@ export function wallLengthProblem(wall: Pick<Wall, 'id' | 'start' | 'end'>): Edi
   return new EditError('wall_too_short', `Wall "${wall.id}" would be ${m(len)} long; walls must be at least ${m(MIN_WALL_LENGTH)}.`, { id: wall.id, length: len, min: MIN_WALL_LENGTH });
 }
 
-export type OpeningShape = Pick<Opening, 'offset' | 'width' | 'height' | 'sill'> & { id?: string };
+export type OpeningShape = Pick<Opening, 'offset' | 'width' | 'height' | 'sill'> & Partial<Pick<Opening, 'type' | 'depth'>> & { id?: string };
+
+/** A niche leaves at least this much wall behind it. */
+const NICHE_BACK = 0.02;
 
 /**
  * Everything wrong with an opening on a wall. `opening_overlap` can be overridden on
@@ -62,6 +65,16 @@ export function openingProblems(home: Home, wall: Wall, o: OpeningShape): EditEr
         top,
         wallHeight: height,
       }),
+    );
+  }
+
+  if (o.type === 'niche' && o.depth !== undefined && o.depth > wall.thickness - NICHE_BACK) {
+    problems.push(
+      new EditError(
+        'niche_too_deep',
+        `${label} is ${m(o.depth)} deep but wall "${wall.id}" is ${m(wall.thickness)} thick, so it would go through. Make it at most ${m(Math.max(0, wall.thickness - NICHE_BACK))} deep, make the wall thicker, or use a plain opening.`,
+        { id: o.id, wall: wall.id, depth: o.depth, thickness: wall.thickness },
+      ),
     );
   }
 

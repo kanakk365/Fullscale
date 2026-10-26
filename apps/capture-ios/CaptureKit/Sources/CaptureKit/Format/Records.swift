@@ -31,7 +31,9 @@ public enum Tracking: String, Codable, Sendable {
 }
 
 public struct PhotoRecord: Codable, Sendable, Equatable {
-    public enum Kind: String, Codable, Sendable { case auto, manual, still, card, tape }
+    /// `detail`: a full-resolution close-up the person took on purpose (a bedsheet's print, a
+    /// photo in a frame, a screen), for copying onto the model.
+    public enum Kind: String, Codable, Sendable { case auto, manual, still, card, tape, detail }
 
     public struct Camera: Codable, Sendable, Equatable {
         public var exposureS: Double

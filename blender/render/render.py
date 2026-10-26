@@ -17,9 +17,13 @@ import time
 import traceback
 
 import bpy
+from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lighting import add_lamps, add_stand_in_lights, expose_like_a_phone, light_outside  # noqa: E402
+from own_models import use_own_models  # noqa: E402
 from render_args import JobError, look_at_euler, parse_job, studio_to_blender  # noqa: E402
+from surfaces import finish_surfaces, soften_edges  # noqa: E402
 
 
 def report(marker: str, payload: dict) -> None:
@@ -48,26 +52,53 @@ def use_gpu(scene: bpy.types.Scene) -> str:
     return "CPU"
 
 
-def set_up_world(scene: bpy.types.Scene) -> None:
-    world = bpy.data.worlds.new("Fullscale sky")
-    scene.world = world
-    world.use_nodes = True
-    nodes = world.node_tree.nodes
-    background = next(n for n in nodes if n.type == "BACKGROUND")
-    try:
-        sky = nodes.new("ShaderNodeTexSky")
-        world.node_tree.links.new(sky.outputs["Color"], background.inputs["Color"])
-        background.inputs["Strength"].default_value = 0.6
-    except RuntimeError:
-        # No sky texture in this Blender: a soft plain light instead.
-        background.inputs["Color"].default_value = (0.85, 0.88, 0.92, 1.0)
-        background.inputs["Strength"].default_value = 0.8
-    sun_data = bpy.data.lights.new("Sun", type="SUN")
-    sun_data.energy = 3.0
-    sun_data.angle = 0.05
-    sun = bpy.data.objects.new("Sun", sun_data)
-    sun.rotation_euler = (0.9, 0.2, 0.8)
-    scene.collection.objects.link(sun)
+def ready_to_explore(scene: bpy.types.Scene) -> None:
+    """Open the saved file looking the way the render does, from where it was taken: the view
+    shows Blender's own renderer live (grainy for a moment while moving, then clean), and it
+    turns and zooms around the room in front of the camera, not the corner where the home's
+    plan starts. Ceilings are only in the file when the camera is inside a room; hide one
+    (click it, press H) to look in from above.
+
+    The home's plan starts at a corner, and Blender turns around its world's middle (and puts
+    its 3D cursor there) whenever it has nothing better, so everything, camera and lights
+    included, is moved to put the middle of the home's floor there. The picture is the same;
+    the file's numbers are the studio's moved by `fullscale_offset`."""
+    scene.cycles.preview_samples = 64
+    scene.cycles.use_preview_denoising = True
+    scene.cycles.preview_denoising_start_sample = 1
+    corners = [obj.matrix_world @ Vector(c) for obj in scene.objects if obj.type == "MESH" for c in obj.bound_box]
+    camera = scene.camera
+    if not corners or camera is None:
+        return
+    low = Vector((min(c.x for c in corners), min(c.y for c in corners), min(c.z for c in corners)))
+    high = Vector((max(c.x for c in corners), max(c.y for c in corners), max(c.z for c in corners)))
+    offset = Vector(((low.x + high.x) / 2, (low.y + high.y) / 2, 0.0))
+    for obj in scene.objects:
+        if obj.parent is None:
+            obj.location -= offset
+    scene["fullscale_offset"] = tuple(-offset)
+    scene.cursor.location = (0.0, 0.0, 0.0)
+    bpy.context.view_layer.update()
+    low -= offset
+    high -= offset
+    eye = camera.matrix_world.translation
+    forward = camera.matrix_world.to_3x3() @ Vector((0.0, 0.0, -1.0))
+    reach = max(1.0, ((low + high) / 2 - eye).length)
+    for screen in bpy.data.screens:
+        for area in screen.areas:
+            for space in area.spaces:
+                if space.type != "VIEW_3D":
+                    continue
+                space.shading.type = "RENDERED"
+                space.lens = camera.data.lens
+                space.clip_start = 0.01
+                view = space.region_3d
+                if view is not None:
+                    # Blender's view sits `view_distance` behind the point it turns around.
+                    view.view_perspective = "PERSP"
+                    view.view_rotation = camera.matrix_world.to_quaternion()
+                    view.view_location = eye + forward * reach
+                    view.view_distance = reach
 
 
 def main() -> None:
@@ -86,15 +117,22 @@ def main() -> None:
     scene.cycles.use_adaptive_sampling = True
     scene.cycles.adaptive_threshold = job.preset.noise_threshold
     scene.cycles.use_denoising = True
-    scene.cycles.max_bounces = 8
-    scene.cycles.diffuse_bounces = 4
+    # Rooms are lit mostly by light bouncing off walls and ceilings, so let it bounce.
+    scene.cycles.max_bounces = 12
+    scene.cycles.diffuse_bounces = 6
     scene.cycles.glossy_bounces = 4
+    scene.cycles.transmission_bounces = 8
+    scene.cycles.blur_glossy = 1.0
+    # In the picture's brightness; the exposure step scales it to the scene.
     scene.cycles.sample_clamp_indirect = 10.0
     scene.cycles.caustics_reflective = False
     scene.cycles.caustics_refractive = False
     scene.cycles.seed = 1
     try:
         scene.view_settings.view_transform = "AgX"
+        # AgX on its own washes out strong colours (a red bedsheet turns pink); its punchy
+        # look keeps them as a phone photo shows them.
+        scene.view_settings.look = "AgX - Punchy"
     except TypeError:
         scene.view_settings.view_transform = "Filmic"
     scene.render.resolution_x = job.preset.width
@@ -102,7 +140,17 @@ def main() -> None:
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = job.out
-    set_up_world(scene)
+    own = use_own_models(scene, job.models) if job.models else {}
+    surfaces = finish_surfaces(job.files)
+    softened = soften_edges(scene)
+    report("FULLSCALE_PROGRESS", {"step": "surfaces", "materials": surfaces, "softenedMeshes": softened, **own})
+    lighting = job.lighting
+    lamps = add_lamps(scene)
+    # After dark, a room needs a light; when the home has none, an ordinary ceiling light
+    # stands in, and the result says so.
+    stand_ins = add_stand_in_lights(scene) if not lamps and lighting.time != "day" else 0
+    outside = light_outside(scene, lighting)
+    report("FULLSCALE_PROGRESS", {"step": "lighting", "time": lighting.time, "lamps": len(lamps), "standInLights": stand_ins, **outside})
 
     camera_data = bpy.data.cameras.new("Camera")
     camera_data.sensor_fit = "VERTICAL"
@@ -114,11 +162,29 @@ def main() -> None:
     scene.collection.objects.link(camera)
     scene.camera = camera
 
+    report("FULLSCALE_PROGRESS", {"step": "metering"})
+    exposure = expose_like_a_phone(scene, lighting, lamps)
+    if job.blend:
+        # The scene as rendered, to open in Blender and look around in or change.
+        ready_to_explore(scene)
+        bpy.ops.wm.save_as_mainfile(filepath=job.blend, copy=True)
+        report("FULLSCALE_PROGRESS", {"step": "saved", "blend": job.blend})
     report("FULLSCALE_PROGRESS", {"step": "rendering", "device": device, "samples": job.preset.samples})
     bpy.ops.render.render(write_still=True)
     report(
         "FULLSCALE_RESULT",
-        {"out": job.out, "width": job.preset.width, "height": job.preset.height, "device": device, "samples": job.preset.samples, "seconds": round(time.monotonic() - started, 1), "blender": bpy.app.version_string},
+        {
+            "out": job.out,
+            "width": job.preset.width,
+            "height": job.preset.height,
+            "device": device,
+            "samples": job.preset.samples,
+            "seconds": round(time.monotonic() - started, 1),
+            "blender": bpy.app.version_string,
+            "lighting": {"time": lighting.time, "lamps": len(lamps), "standInLights": stand_ins, **outside, **exposure},
+            **own,
+            **({"blend": job.blend} if job.blend else {}),
+        },
     )
 
 

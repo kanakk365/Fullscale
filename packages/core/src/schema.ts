@@ -43,13 +43,37 @@ export const SourceSchema = z.object({
 /** Sources for single fields, keyed by field name, e.g. `{ thickness: { kind: 'estimate' } }`. */
 export const FieldSourcesSchema = z.record(z.string(), SourceSchema);
 
+// Paths to local files are "/"-separated parts that never start with "." (so no "..", no
+// hidden files and no absolute paths).
+const pathPart = String.raw`[\p{L}\p{N}_ ()+,-][\p{L}\p{N}_ ()+,.-]*`;
+const safePath = (ending: string) => new RegExp(`^${pathPart}(?:/${pathPart})*${ending}$`, 'iu');
+
+/** What a surface is made of: renderers give each its own surface (a weave, a grain, a shine).
+ *  plaster is a rough, hand-textured wall or ceiling finish; paint is a smooth painted one. */
+export const MaterialKindSchema = z.enum(['paint', 'plaster', 'wood', 'tile', 'stone', 'fabric', 'carpet', 'metal', 'glass', 'plastic', 'other']);
+export type MaterialKind = z.infer<typeof MaterialKindSchema>;
+
 export const MaterialSchema = z.object({
   id: IdSchema,
   name: z.string().min(1).max(80),
-  kind: z.enum(['paint', 'wood', 'tile', 'stone', 'fabric', 'carpet', 'metal', 'glass', 'plastic', 'other']),
+  kind: MaterialKindSchema,
   color: HexColorSchema,
   /** id of a texture set in the asset library (optional) */
   texture: z.string().max(80).optional(),
+  /** a picture on the surface: a file in the home's folder (cut from a photo with
+   *  texture_from_photo, or the person's own), stays on this computer like the home */
+  image: z
+    .object({
+      file: z.string().max(300).regex(safePath(String.raw`\.(?:jpe?g|png)`), 'pictures are .jpg or .png files inside the home’s folder'),
+      /** the real size the picture shows, in metres; it repeats at this size */
+      width: positive().optional(),
+      height: positive().optional(),
+      /** repeat: tile it (a fabric print, tiles); mirror: tile it mirrored, which hides the
+       *  seams of a patch cut from a photo; stretch: once across each face (a photo in a
+       *  frame, a poster, a screen) */
+      fit: z.enum(['repeat', 'mirror', 'stretch']).default('repeat'),
+    })
+    .optional(),
   /** real-world size in metres of one texture tile */
   tileSize: positive().optional(),
   roughness: z.number().min(0).max(1).default(0.85),
@@ -89,7 +113,8 @@ export const WallSchema = z.object({
 export const OpeningSchema = z.object({
   id: IdSchema,
   wall: IdSchema,
-  type: z.enum(['door', 'window', 'opening']),
+  /** a niche is a recess part-way into the wall (an alcove), not a way through */
+  type: z.enum(['door', 'window', 'opening', 'niche']),
   /** distance along the wall from its start point to the opening's near edge */
   offset: finite(),
   /** clear width */
@@ -101,7 +126,22 @@ export const OpeningSchema = z.object({
   /** doors: which jamb the hinge is on, and which side of the wall the leaf opens into */
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
+  /** doors: how far the leaf stands open, in degrees (0 = shut); unset draws it ajar */
+  openDegrees: z.number().min(0).max(120).optional(),
+  /** niches: how deep the recess goes into the wall, which face it opens on, and how many
+   *  built-in shelves cross it */
+  depth: positive().optional(),
+  face: z.enum(['left', 'right']).optional(),
+  shelves: z.number().int().min(0).max(12).optional(),
+  /** doors and windows: one leaf or a pair meeting in the middle */
+  leaves: z.union([z.literal(1), z.literal(2)]).optional(),
+  /** doors: raised panels stacked on each leaf (0 is a flush door) */
+  panels: z.number().int().min(0).max(6).optional(),
+  /** windows: the grid of glass panes in each leaf, [across, up] */
+  panes: z.tuple([z.number().int().min(1).max(6), z.number().int().min(1).max(8)]).optional(),
   style: z.string().max(40).optional(),
+  /** materials of its parts: the frame, a door's leaf, a window's glass (defaults when unset) */
+  materials: z.object({ frame: IdSchema.optional(), leaf: IdSchema.optional(), glass: IdSchema.optional() }).optional(),
   source: SourceSchema.optional(),
   sources: FieldSourcesSchema.optional(),
 });
@@ -119,11 +159,6 @@ export const RoomSchema = z.object({
   source: SourceSchema.optional(),
   sources: FieldSourcesSchema.optional(),
 });
-
-// Paths to local files are "/"-separated parts that never start with "." (so no "..", no
-// hidden files and no absolute paths).
-const pathPart = String.raw`[\p{L}\p{N}_ ()+,-][\p{L}\p{N}_ ()+,.-]*`;
-const safePath = (ending: string) => new RegExp(`^${pathPart}(?:/${pathPart})*${ending}$`, 'iu');
 
 export const ModelFileSchema = z.string().max(200).regex(safePath(String.raw`\.(?:glb|gltf)`), 'model files are .glb or .gltf paths inside the models folder');
 
@@ -144,6 +179,16 @@ export const ModelRefSchema = z.object({
   yaw: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).default(0),
 });
 
+/** The light of a lamp, bulb or tube light, where it differs from its catalogue entry.
+ *  Renders light the room with it. */
+export const LightSchema = z.object({
+  on: z.boolean().default(true),
+  /** colour temperature: about 2700 is warm yellow, 4000 neutral white, 6500 cool daylight white */
+  kelvin: z.number().int().min(1500).max(10000).optional(),
+  /** how bright, in lumens (a 9 W LED bulb gives about 800) */
+  lumens: positive().max(50000).optional(),
+});
+
 export const ItemSchema = z.object({
   id: IdSchema,
   level: IdSchema,
@@ -160,6 +205,8 @@ export const ItemSchema = z.object({
   materials: z.record(z.string(), IdSchema).default({}),
   /** the user's own 3D model, drawn at `size` instead of the catalogue shape */
   model: ModelRefSchema.optional(),
+  /** for lights: on or off, and their colour and brightness when not the catalogue's */
+  light: LightSchema.optional(),
   locked: z.boolean().default(false),
   source: SourceSchema.optional(),
   sources: FieldSourcesSchema.optional(),
@@ -259,6 +306,7 @@ export type Opening = z.infer<typeof OpeningSchema>;
 export type Room = z.infer<typeof RoomSchema>;
 export type ModelRef = z.infer<typeof ModelRefSchema>;
 export type ModelRefInput = z.input<typeof ModelRefSchema>;
+export type Light = z.infer<typeof LightSchema>;
 export type Item = z.infer<typeof ItemSchema>;
 export type CaptureRef = z.infer<typeof CaptureRefSchema>;
 export type PlanPicture = z.infer<typeof PlanPictureSchema>;

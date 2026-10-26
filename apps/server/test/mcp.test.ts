@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -71,6 +71,20 @@ describe('the tool list', () => {
 
   it('keeps the instructions short', () => {
     expect(INSTRUCTIONS.length).toBeLessThan(2000);
+  });
+
+  it('tells agents to ask the person when a scan leaves them unsure', () => {
+    expect(INSTRUCTIONS).toMatch(/ask the person before building on a guess/);
+  });
+
+  it('names only real tools in the agent skill', () => {
+    const skill = readFileSync(new URL('../../../skills/fullscale/SKILL.md', import.meta.url), 'utf8');
+    expect(skill).toMatch(/^---\nname: fullscale\ndescription: .+\n---\n/);
+    const names = new Set(TOOLS.map((t) => t.name));
+    // Tool names are in backticks; expect_rev is an argument, not a tool.
+    const named = [...skill.matchAll(/`([a-z]+(?:_[a-z0-9]+)+)`/g)].map((m) => m[1]!).filter((n) => n !== 'expect_rev');
+    expect(named.length).toBeGreaterThan(10);
+    expect(named.filter((n) => !names.has(n))).toEqual([]);
   });
 
   it('serves clients that only speak the older protocol', async () => {
@@ -156,6 +170,30 @@ describe('editing', () => {
     expect(r.data.achieved).toMatchObject({ created: { item: 1 } });
     expect(r.text).toMatch(/Item 1 \(bookshelf\) left out: .*bedroom-door/);
     expect(r.text).toMatch(/It would fit at/);
+  });
+
+  it('hangs ceiling fans and lights from the ceiling, and sets a light’s colour', async () => {
+    const r = await call('add_items', {
+      items: [
+        { catalog: 'ceiling-fan', room: 'room-1' },
+        { catalog: 'wall-bulb', position: [2, 0.2], elevation: 2.3, light: { kelvin: 2700 } },
+      ],
+    });
+    expect(r.isError).toBeFalsy();
+    const fan = studio.home.items.find((i) => i.catalog === 'ceiling-fan')!;
+    const room = studio.home.rooms.find((x) => x.id === 'room-1')!;
+    const ceiling = room.ceilingHeight ?? studio.home.levels[0]!.height;
+    expect(fan.position[1]).toBeCloseTo(ceiling - fan.size[1], 3);
+    expect(studio.home.items.find((i) => i.catalog === 'wall-bulb')!.light).toEqual({ on: true, kelvin: 2700 });
+    const off = await call('update_item', { id: 'wall-bulb-1', light: { on: false } });
+    expect(off.isError).toBeFalsy();
+    expect(studio.home.items.find((i) => i.id === 'wall-bulb-1')!.light).toEqual({ on: false, kelvin: 2700 });
+  });
+
+  it('lists the lights in the catalogue with their colour and brightness', async () => {
+    const r = await call('search_catalog', { category: 'lighting' });
+    expect(r.text).toMatch(/wall-bulb: .*a light \(6500 K, 900 lm\)/);
+    expect(r.text).toMatch(/ceiling-light: .*hangs from the ceiling/);
   });
 
   it('checks a fit and says what it did not check', async () => {
@@ -248,6 +286,22 @@ describe('photo-real pictures', () => {
     expect(r.isError).toBeFalsy();
     expect(r.text).toMatch(/Rendered revision 0 in 0.1 s on CPU/);
     expect(r.images).toHaveLength(1);
+  });
+
+  it('tells Blender the time of day and the windows, and says how the picture was lit', async () => {
+    const fake = join(dir, 'fake-blender.cjs');
+    writeFileSync(join(dir, 'pixel.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'));
+    writeFileSync(
+      fake,
+      `#!${process.execPath}\nconst a = process.argv; const out = a[a.indexOf('--out') + 1]; const l = JSON.parse(a[a.indexOf('--lighting') + 1]);\nrequire('node:fs').copyFileSync(${JSON.stringify(join(dir, 'pixel.png'))}, out);\nconsole.log('FULLSCALE_RESULT ' + JSON.stringify({ width: 320, height: 240, seconds: 0.1, device: 'CPU', lighting: { time: l.time, lamps: 0, standInLights: 1, sun: false, portals: 0, exposure: 6.2, whiteBalance: 5000, windows: l.windows.length } }));\n`,
+      { mode: 0o755 },
+    );
+    process.env.BLENDER_BIN = fake;
+    const r = await call('render_photoreal', { preset: 'thumb', time: 'night', view: { eye: [2, 1.5, 2], target: [3, 1.2, 1] } });
+    expect(r.isError).toBeFalsy();
+    expect(r.data.lighting).toMatchObject({ time: 'night', windows: studio.home.openings.filter((o) => o.type === 'window' || o.type === 'opening').length });
+    expect(r.text).toMatch(/Night; none of the home’s lights on; exposure \+6.2 stops/);
+    expect(r.text).toMatch(/stand-in ceiling light .*Ask the person what lights the room really has/);
   });
 
   it('says how to get Blender when it is missing, even if another Blender is installed', async () => {

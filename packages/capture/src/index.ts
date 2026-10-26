@@ -3,4 +3,5 @@
 export * from './format.ts';
 export * from './roomplan.ts';
 export * from './import.ts';
+export * from './extra-scan.ts';
 export * from './synthetic.ts';

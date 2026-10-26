@@ -3,6 +3,7 @@
 import {
   catalogEntry,
   checkItemFit,
+  itemLight,
   locate,
   polygonArea,
   roomInfo,
@@ -159,7 +160,7 @@ function OpeningPanel({ home, opening }: { home: Home; opening: Opening }) {
   return (
     <section className="panel">
       <h2>
-        {opening.type === 'door' ? 'Door' : opening.type === 'window' ? 'Window' : 'Opening'} {opening.id}
+        {opening.type === 'door' ? 'Door' : opening.type === 'window' ? 'Window' : opening.type === 'niche' ? 'Niche' : 'Opening'} {opening.id}
       </h2>
       <Row label="Width" source={<SourceBadge source={sourceOf(opening, 'width')} />}>
         <LengthInput value={opening.width} onCommit={(v) => v && update({ width: v })} />
@@ -232,6 +233,7 @@ function RoomPanel({ home, room }: { home: Home; room: Room }) {
 
 function ItemPanel({ home, item }: { home: Home; item: Item }) {
   const entry = catalogEntry(item.catalog);
+  const light = itemLight(item);
   const [fit, setFit] = useState<string | null>(null);
   const update = (patch: Omit<Extract<BaseOperation, { op: 'updateItem' }>, 'op' | 'id'>) => edit({ op: 'updateItem', id: item.id, ...patch });
   const setSize = (i: 0 | 1 | 2, v: number) => {
@@ -267,6 +269,20 @@ function ItemPanel({ home, item }: { home: Home; item: Item }) {
       <Row label="Colour">
         <ColorInput value={colourOf(home, item.materials[part], entry.colors[part] ?? '#bdbdbd')} onCommit={(color) => edit({ op: 'paint', target: { item: item.id, part }, color })} />
       </Row>
+      {light && (
+        <>
+          <Row label="Light on">
+            <input type="checkbox" checked={light.on} onChange={(e) => update({ light: { on: e.target.checked } })} />
+          </Row>
+          <Row label="Light colour">
+            <NumberInput value={light.kelvin} step={100} suffix=" K" onCommit={(v) => v >= 1500 && v <= 10000 && update({ light: { kelvin: Math.round(v) } })} />
+          </Row>
+          <Row label="Brightness">
+            <NumberInput value={light.lumens} step={100} suffix=" lm" onCommit={(v) => v > 0 && v <= 50000 && update({ light: { lumens: v } })} />
+          </Row>
+          <p className="hint">2700 K is warm yellow, 4000 K neutral white, 6500 K cool daylight white. A 9 W LED bulb gives about 800 lm.</p>
+        </>
+      )}
       <Row label="Locked">
         <input type="checkbox" checked={item.locked} onChange={(e) => update({ locked: e.target.checked })} />
       </Row>

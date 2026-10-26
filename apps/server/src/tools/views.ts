@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { insideFolder } from '../files.ts';
 import { pictureInfo } from '../images.ts';
 import { renderPlanPng, svgToPng } from '../render-plan-png.ts';
-import { findBlender, forecast, renderPhotoreal, RENDER_SIZES, type RenderPreset } from '../render.ts';
+import { findBlender, forecast, renderPhotoreal, RENDER_SIZES, type RenderLighting, type RenderPreset } from '../render.ts';
 import { defineTool, Id, type ToolContext, type ToolResult } from './define.ts';
 
 const Width = z.number().int().min(256).max(2048).optional();
@@ -137,10 +137,14 @@ export const renderPhoto = defineTool({
   name: 'render_photoreal',
   title: 'Photo-real picture',
   description:
-    'A photo-real picture rendered by Blender (installed on this computer) from a named view or an eye and target. Presets: thumb (320 px, seconds), preview (1280 × 720), final (1920 × 1080, minutes). Use dry_run first to see the size, an estimated time and warnings. The picture is pinned to the revision it was rendered from.',
+    'A photo-real picture rendered by Blender (installed on this computer) from a named view or an eye and target. Presets: thumb (320 px, seconds), preview (1280 × 720), final (1920 × 1080, minutes). The room is lit by its own lights (the catalogue’s lighting items, where they are switched on) and by daylight through its windows for the time of day; the camera exposes like a phone. Use dry_run first to see the size, an estimated time and warnings. The picture is pinned to the revision it was rendered from.',
   input: z.object({
     view: ViewSchema.optional(),
     preset: z.enum(['thumb', 'preview', 'final']).optional().describe('default preview'),
+    time: z
+      .enum(['day', 'evening', 'night'])
+      .optional()
+      .describe('the light outside: day (sun and sky through the windows, the default), evening (a low warm sun) or night (only the room’s own lights)'),
     dry_run: z.boolean().optional(),
   }),
   effect: 'read',
@@ -163,17 +167,42 @@ export const renderPhoto = defineTool({
       );
     }
     const rev = ctx.studio.rev;
-    const result = await renderPhotoreal({ home, rev, view: q.view ?? { preset: 'three-quarter' }, preset, blender, script: RENDER_SCRIPT, folder: join(ctx.paths.data, 'renders') });
+    const time = q.time ?? 'day';
+    const result = await renderPhotoreal({
+      home,
+      rev,
+      view: q.view ?? { preset: 'three-quarter' },
+      preset,
+      time,
+      blender,
+      script: RENDER_SCRIPT,
+      folder: join(ctx.paths.data, 'renders'),
+      files: ctx.paths.homeDir,
+      models: ctx.paths.models,
+    });
     const png = readFileSync(result.file);
     const shown = result.width > SHOWN_WIDTH ? shrink(png, result.width, result.height) : png;
     const stale = ctx.studio.rev !== result.rev ? ` The home has changed since (now revision ${ctx.studio.rev}).` : '';
     return {
-      text: `Rendered revision ${result.rev} in ${result.seconds} s on ${result.device}; saved at ${result.file}.${stale}`,
+      text: `Rendered revision ${result.rev} in ${result.seconds} s on ${result.device}; saved at ${result.file}.${result.blend ? ` The scene is saved as a Blender file to open and look around in: ${result.blend}.` : ''}${lightingText(result.lighting)}${stale}`,
       data: { ...result, size: RENDER_SIZES[preset] },
       images: [shown],
     };
   },
 });
+
+function lightingText(l: RenderLighting | undefined): string {
+  if (!l) return '';
+  const parts = [
+    `${l.time === 'day' ? 'Daylight' : l.time === 'evening' ? 'Evening light' : 'Night'}${l.sun ? ', the sun shining in through a window (its direction is chosen for the picture, not the home’s real one)' : ''}`,
+  ];
+  parts.push(l.lamps ? `${l.lamps} of the home’s lights on` : 'none of the home’s lights on');
+  let text = ` Lit by: ${parts.join('; ')}; exposure ${l.exposure >= 0 ? '+' : ''}${l.exposure} stops, white balance ${l.whiteBalance} K.`;
+  if (l.standInLights) {
+    text += ` The home has no lights switched on, so a stand-in ceiling light lit ${l.standInLights === 1 ? 'the room' : `${l.standInLights} rooms`}. Ask the person what lights the room really has (a bulb, a tube light, a ceiling light, lamps; warm yellow or white) and add them from the catalogue’s lighting group.`;
+  }
+  return text;
+}
 
 function shrink(png: Buffer, width: number, height: number): Buffer {
   const h = Math.round((height * SHOWN_WIDTH) / width);

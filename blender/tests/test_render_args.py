@@ -3,7 +3,7 @@ import json
 import math
 import unittest
 
-from render.render_args import PRESETS, JobError, euler_matrix, look_at_euler, parse_job, studio_to_blender
+from render.render_args import PRESETS, JobError, Lighting, euler_matrix, look_at_euler, parse_job, studio_to_blender
 
 
 def camera_axes(angles):
@@ -18,6 +18,44 @@ class Arguments(unittest.TestCase):
         job = parse_job(["--glb", "h.glb", "--out", "p.png", "--camera", json.dumps({"eye": [5, 1.6, 5], "target": [0, 1, 0]}), "--preset", "thumb"])
         self.assertEqual(job.preset, PRESETS["thumb"])
         self.assertEqual(job.fov, 40)
+        self.assertIsNone(job.blend)
+
+    def test_a_job_can_also_save_the_blender_file(self):
+        job = parse_job(["--glb", "h.glb", "--out", "p.png", "--camera", json.dumps({"eye": [5, 1.6, 5], "target": [0, 1, 0]}), "--blend", "scene.blend"])
+        self.assertEqual(job.blend, "scene.blend")
+
+    def test_the_light_outside_is_turned_into_blenders_frame(self):
+        lighting = json.dumps({"time": "evening", "sun": [0, 0, -2], "windows": [{"centre": [1, 1.5, 0], "width": 1.2, "height": 1.0, "inward": [0, 0, 1]}]})
+        job = parse_job(["--glb", "h", "--out", "o", "--camera", json.dumps({"eye": [5, 1.6, 5], "target": [0, 1, 0]}), "--lighting", lighting])
+        self.assertEqual(job.lighting.time, "evening")
+        # Studio -z (north on the plan) is Blender +y.
+        self.assertEqual(job.lighting.sun, (0.0, 1.0, 0.0))
+        window = job.lighting.windows[0]
+        self.assertEqual(window.centre, (1.0, 0.0, 1.5))
+        self.assertEqual(window.inward, (0.0, -1.0, 0.0))
+
+    def test_without_lighting_it_is_day(self):
+        job = parse_job(["--glb", "h", "--out", "o", "--camera", json.dumps({"eye": [5, 1.6, 5], "target": [0, 1, 0]})])
+        self.assertEqual(job.lighting, Lighting())
+        self.assertEqual(job.lighting.time, "day")
+
+    def test_bad_lighting_is_refused_in_plain_words(self):
+        camera = json.dumps({"eye": [5, 1.6, 5], "target": [0, 1, 0]})
+        with self.assertRaisesRegex(JobError, "time of day"):
+            parse_job(["--glb", "h", "--out", "o", "--camera", camera, "--lighting", '{"time": "noon"}'])
+        with self.assertRaisesRegex(JobError, "lighting must be"):
+            parse_job(["--glb", "h", "--out", "o", "--camera", camera, "--lighting", '{"sun": [0, 0, 0]}'])
+
+    def test_pictures_and_own_models_come_from_this_computer(self):
+        camera = json.dumps({"eye": [5, 1.6, 5], "target": [0, 1, 0]})
+        models = json.dumps([{"item": "sofa-1", "file": "/models/ikea/sofa.glb", "fit": "stretch", "yaw": 90, "size": [2.1, 0.85, 0.92]}])
+        job = parse_job(["--glb", "h", "--out", "o", "--camera", camera, "--files", "/homes/mine", "--models", models])
+        self.assertEqual(job.files, "/homes/mine")
+        self.assertEqual(job.models[0].item, "sofa-1")
+        self.assertEqual(job.models[0].fit, "stretch")
+        self.assertEqual(job.models[0].size, (2.1, 0.85, 0.92))
+        with self.assertRaisesRegex(JobError, "models must be"):
+            parse_job(["--glb", "h", "--out", "o", "--camera", camera, "--models", '[{"item": "x"}]'])
 
     def test_bad_cameras_are_refused_in_plain_words(self):
         with self.assertRaisesRegex(JobError, "eye"):

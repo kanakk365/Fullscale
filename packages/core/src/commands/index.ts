@@ -3,7 +3,7 @@ export { addLevel, createHome, DEFAULT_STOREY_HEIGHT, renameHome, updateLevel } 
 export { addWall, cornerWalls, DEFAULT_WALL_THICKNESS, moveWall, moveWallCorner, moveWallEnd, setWallLength, splitWallAt, updateWall } from './walls.ts';
 export { detectRooms, drawWall, joinWallEnd, mergeWalls, splitWall } from './drawing.ts';
 export { keepRoomsOnWalls } from './follow.ts';
-export { addOpening, OPENING_DEFAULTS, updateOpening } from './openings.ts';
+export { addOpening, NICHE_DEPTH, OPENING_DEFAULTS, roomFace, updateOpening } from './openings.ts';
 export { addRectangularRoom, addRoom, drawRoom, MIN_ROOM_SIDE, updateRoom } from './rooms.ts';
 export { addItem, updateItem } from './items.ts';
 export { paint, PaintTargetSchema, upsertMaterial, type PaintTarget } from './materials.ts';

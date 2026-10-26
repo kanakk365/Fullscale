@@ -1,5 +1,5 @@
 // Tools that build: walls, rooms, doors and windows.
-import { EditError, lengthField, OPENING_DEFAULTS, wallLength, type BaseOperation, type Vec2 } from '@fullscale/core';
+import { EditError, lengthField, NICHE_DEPTH, OPENING_DEFAULTS, wallLength, type BaseOperation, type Vec2 } from '@fullscale/core';
 import { z } from 'zod';
 import { defineTool, Distance, Id, Length, m, Point, receiptResult, write, WriteOptions } from './define.ts';
 
@@ -198,17 +198,27 @@ const OpeningFields = {
   sill: Distance('height of the bottom above the floor; 0 for doors').optional(),
   hinge: z.enum(['start', 'end']).optional().describe('doors: the jamb the hinge is on, towards the wall’s start or end'),
   swing: z.enum(['left', 'right']).optional().describe('doors: the side of the wall the leaf opens into, walking from start to end'),
+  openDegrees: z.number().min(0).max(120).optional().describe('doors: how far the leaf stands open, in degrees; 0 is shut'),
+  depth: Length('niches: how deep the recess goes into the wall').optional(),
+  face: z.enum(['left', 'right']).optional().describe('niches: the face of the wall it opens on; default the side with a room'),
+  shelves: z.number().int().min(0).max(12).optional().describe('niches: built-in shelves across the recess'),
+  leaves: z
+    .union([z.literal(1), z.literal(2)])
+    .optional()
+    .describe('doors and windows: one leaf, or a pair meeting in the middle'),
+  panels: z.number().int().min(0).max(6).optional().describe('doors: raised panels stacked on each leaf; 0 is a flat (flush) door'),
+  panes: z.array(z.number().int().min(1).max(8)).length(2).optional().describe('windows: the grid of glass panes in each leaf, [across, up], e.g. [1, 4] for four panes stacked'),
   style: z.string().max(40).optional(),
   force: z.boolean().optional().describe('allow overlapping another opening on purpose'),
 };
 
 export const addOpening = defineTool({
   name: 'add_opening',
-  title: 'Add a door or window',
-  description: `Add a door, window or plain opening to a wall. Place it by \`offset\` (wall start to its near edge) or \`centre\` (wall start to its middle); default centred. Defaults: door ${OPENING_DEFAULTS.door.width} × ${OPENING_DEFAULTS.door.height} m; window ${OPENING_DEFAULTS.window.width} × ${OPENING_DEFAULTS.window.height} m at ${OPENING_DEFAULTS.window.sill} m. Refused if it runs off the wall, is taller than the wall, or overlaps another opening.`,
+  title: 'Add a door, window or niche',
+  description: `Add a door, window, plain opening or niche (an alcove: a recess part-way into the wall, with built-in shelves if you like) to a wall. Place it by \`offset\` (wall start to its near edge) or \`centre\` (wall start to its middle); default centred. Defaults: door ${OPENING_DEFAULTS.door.width} × ${OPENING_DEFAULTS.door.height} m; window ${OPENING_DEFAULTS.window.width} × ${OPENING_DEFAULTS.window.height} m at ${OPENING_DEFAULTS.window.sill} m; niche ${OPENING_DEFAULTS.niche.width} × ${OPENING_DEFAULTS.niche.height} m at ${OPENING_DEFAULTS.niche.sill} m, ${NICHE_DEPTH} m deep. Refused if it runs off the wall, is taller than the wall, overlaps another opening, or a niche is deeper than the wall is thick.`,
   input: z.object({
     wall: Id,
-    type: z.enum(['door', 'window', 'opening']),
+    type: z.enum(['door', 'window', 'opening', 'niche']),
     offset: Distance('wall start to the near edge').optional(),
     centre: Distance('wall start to the middle').optional(),
     ...OpeningFields,
@@ -231,8 +241,9 @@ export const addOpening = defineTool({
 
 export const updateOpening = defineTool({
   name: 'update_opening',
-  title: 'Change a door or window',
-  description: 'Move or resize a door, window or opening, move it to another wall, or change how a door opens.',
+  title: 'Change a door, window or niche',
+  description:
+    'Move or resize a door, window, opening or niche, move it to another wall, open or shut a door (openDegrees), give a door or window its look (one or two leaves, a door’s panels, a window’s panes), or change a niche’s depth, face and shelves.',
   input: z.object({
     id: Id,
     wall: Id.optional().describe('move it to this wall'),

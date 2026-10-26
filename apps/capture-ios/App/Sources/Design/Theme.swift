@@ -56,6 +56,7 @@ struct ProgressRing: View {
 struct ChecklistChip: View {
     let item: ScanProgress.Item
     let photos: Int
+    var details = 0
 
     var body: some View {
         HStack(spacing: 5) {
@@ -75,6 +76,7 @@ struct ChecklistChip: View {
         case .floor: "Floor"
         case .ceiling: "Ceiling"
         case .photos: "Photos \(photos)"
+        case .details: "Details \(details)"
         }
     }
 
