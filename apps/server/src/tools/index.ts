@@ -4,6 +4,7 @@ import { addOpening, addRoom, detectRooms, drawWalls, joinWallEnd, mergeWalls, m
 import { importCapture } from './capture.ts';
 import type { Tool } from './define.ts';
 import { addItems, listModelsTool, paint, updateItem, upsertMaterial } from './furnish.ts';
+import { compareDesigns, deleteDesign, listDesigns, newDesign, openDesign } from './designs.ts';
 import { textureFromPhoto, viewPhoto } from './photos.ts';
 import { addPlanPicture, applyEdits, clearHome, redo, remove, scalePlanPicture, setSource, undo } from './manage.ts';
 import { checkFitTool, findElements, fitsThroughTool, getElements, getHome, getLevel, getSelection, measure, recentChanges, searchCatalog, validate } from './read.ts';
@@ -53,6 +54,11 @@ export const TOOLS: readonly Tool[] = [
   importCapture,
   viewPhoto,
   textureFromPhoto,
+  listDesigns,
+  newDesign,
+  openDesign,
+  compareDesigns,
+  deleteDesign,
 ] as unknown as readonly Tool[];
 
 export type { Tool, ToolContext, ToolResult } from './define.ts';

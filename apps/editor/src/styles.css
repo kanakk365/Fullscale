@@ -126,6 +126,12 @@ input {
   color: var(--muted);
 }
 
+/* The real home and its designs. */
+select.versions {
+  max-width: 260px;
+  font-weight: 600;
+}
+
 .segmented {
   display: flex;
 }

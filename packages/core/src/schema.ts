@@ -283,6 +283,9 @@ export const HomeSchema = z.object({
   updatedAt: z.string(),
   /** degrees from +z (plan "down") to true north, if known */
   north: finite().optional(),
+  /** set on a design: a copy of the real home (or of another design) to try changes on,
+   *  kept apart so the real home stays as it is */
+  design: z.object({ from: z.string().min(1).max(64), note: z.string().max(500).optional() }).optional(),
   levels: z.array(LevelSchema).min(1),
   walls: z.array(WallSchema).default([]),
   openings: z.array(OpeningSchema).default([]),

@@ -81,7 +81,12 @@ export const RenderReplySchema = z.strictObject({
   error: z.string().max(500).optional(),
 });
 
-export const ClientMessageSchema = z.discriminatedUnion('type', [HelloSchema, OpsSchema, UndoSchema, SelectSchema, SyncSchema, RenderReplySchema]);
+/** The real home and its designs: ask for the list, open one, or copy the open one into a new design. */
+export const VersionsSchema = z.strictObject({ type: z.literal('versions'), req: ReqId });
+export const OpenVersionSchema = z.strictObject({ type: z.literal('open_version'), req: ReqId, id: z.string().min(1).max(64) });
+export const NewVersionSchema = z.strictObject({ type: z.literal('new_version'), req: ReqId, name: z.string().min(1).max(80) });
+
+export const ClientMessageSchema = z.discriminatedUnion('type', [HelloSchema, OpsSchema, UndoSchema, SelectSchema, SyncSchema, RenderReplySchema, VersionsSchema, OpenVersionSchema, NewVersionSchema]);
 
 export type Hello = z.infer<typeof HelloSchema>;
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
@@ -169,13 +174,23 @@ export interface RenderRequest {
   height: number;
 }
 
+/** The real home ("real") and its designs, and which is open; sent to editors when asked and
+ *  whenever it changes. `error` says why a request to open or make one was refused. */
+export interface VersionList {
+  type: 'versions';
+  req?: string;
+  open: string;
+  versions: Array<{ id: string; name: string; from?: string; note?: string; createdAt: string }>;
+  error?: string;
+}
+
 export interface ProtocolError {
   type: 'error';
   code: 'unauthorized' | 'too_old' | 'bad_message' | 'not_ready';
   message: string;
 }
 
-export type ServerMessage = Welcome | Changed | Result | Snapshot | Highlight | Selection | RenderRequest | ProtocolError;
+export type ServerMessage = Welcome | Changed | Result | Snapshot | Highlight | Selection | RenderRequest | VersionList | ProtocolError;
 
 // ---------- keeping a copy of the home ----------
 

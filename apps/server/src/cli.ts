@@ -9,15 +9,16 @@
 //       Print the studio token, for agent apps that connect to http://127.0.0.1:<port>/mcp.
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { createHome, sampleFlat } from '@fullscale/core';
 import { clearRunningServer, readRunningServer, studioToken, writeRunningServer } from './access.ts';
 import { bridge, ensureStudio, studioUp } from './bridge.ts';
-import { defaultPaths, homeFileOf, readHomeFile, Saver, shortPath, writeHomeFile } from './files.ts';
+import { defaultPaths, homeFileOf, readHomeFile, shortPath, writeHomeFile } from './files.ts';
 import { startStudioServer, type StudioServer } from './http.ts';
 import { Studio } from './studio.ts';
+import { Versions } from './versions.ts';
 import { VERSION } from './version.ts';
 
 const DEFAULT_PORT = 4747;
@@ -59,15 +60,17 @@ async function serve(argv: string[]): Promise<void> {
   for (const step of report.upgraded) say(`Upgraded the file: ${step}.`);
   for (const q of report.quarantined) console.error(`Set aside a damaged ${q.collection.replace(/s$/, '')}${q.id ? ` "${q.id}"` : ''}: ${q.problem}`);
 
-  const saver = new Saver(file);
-  const studio = new Studio({ home, save: (h) => saver.save(h) });
-  if (report.upgraded.length) saver.save(home);
+  // The real home and its designs; edits are saved to whichever is open.
+  const versions = new Versions(file, join(dirname(file), 'designs'));
+  const studio = new Studio({ home, save: (h) => versions.save(h) });
+  if (report.upgraded.length) versions.save(home);
   const token = studioToken(paths.run);
   const port = values.port !== undefined ? Number(values.port) : DEFAULT_PORT;
   let server: StudioServer;
   try {
     server = await startStudioServer({
       studio,
+      versions,
       token,
       port,
       paths: { ...paths, homeDir: dirname(file) },
@@ -92,7 +95,7 @@ async function serve(argv: string[]): Promise<void> {
   const stop = async () => {
     if (stopping) return;
     stopping = true;
-    saver.flush();
+    versions.flush();
     clearRunningServer(paths.run);
     await server.close();
     process.exit(0);

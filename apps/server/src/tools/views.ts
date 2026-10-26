@@ -129,7 +129,7 @@ export const highlight = defineTool({
   },
 });
 
-const RENDER_SCRIPT = fileURLToPath(new URL('../../../../blender/render/render.py', import.meta.url));
+export const RENDER_SCRIPT = fileURLToPath(new URL('../../../../blender/render/render.py', import.meta.url));
 /** Pictures for the agent are shown at most this wide; the full picture stays on disk. */
 const SHOWN_WIDTH = 1024;
 

@@ -52,6 +52,16 @@ class Connection {
     this.send({ type: 'select', ids });
   }
 
+  /** Open the real home ("real") or a design; the studio sends the home that's now open. */
+  openVersion(id: string): void {
+    this.send({ type: 'open_version', req: `v${++this.counter}`, id });
+  }
+
+  /** Copy what's open into a new design, and open it. */
+  newVersion(name: string): void {
+    this.send({ type: 'new_version', req: `v${++this.counter}`, name });
+  }
+
   private request(message: Record<string, unknown>): Promise<Answer> {
     const req = `r${++this.counter}`;
     setState((s) => ({ pending: s.pending + 1 }));
@@ -119,8 +129,13 @@ class Connection {
           level: level && home.levels.some((l) => l.id === level) ? level : home.levels[0]!.id,
           ...(message.type === 'welcome' ? { actor: message.actor } : {}),
         });
+        if (message.type === 'welcome') this.send({ type: 'versions', req: `v${++this.counter}` });
         return;
       }
+      case 'versions':
+        setState({ versions: { open: message.open, list: message.versions } });
+        if (message.error) say('error', message.error);
+        return;
       case 'changed': {
         const outcome = this.mirror.receive(message);
         if (outcome === 'resync') {

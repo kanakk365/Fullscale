@@ -41,6 +41,20 @@ export async function redo(): Promise<void> {
   if (answer.ok) say('info', answer.notes[0] ?? 'Redone');
 }
 
+export function openVersion(id: string): void {
+  setState({ selection: [], preview: null });
+  studio.openVersion(id);
+}
+
+/** Start a design: a copy of what's open, to try changes on without touching the real home. */
+export function newDesign(): void {
+  const name = window.prompt('Name the new design (a copy of what’s open now):', 'New design');
+  if (name?.trim()) {
+    setState({ selection: [], preview: null });
+    studio.newVersion(name.trim());
+  }
+}
+
 export function select(ids: string[]): void {
   setState({ selection: ids, highlight: null });
   studio.select(ids);

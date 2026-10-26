@@ -7,6 +7,7 @@ import type { View } from '@fullscale/protocol';
 import { z } from 'zod';
 import type { Paths } from '../files.ts';
 import type { Studio } from '../studio.ts';
+import type { Versions } from '../versions.ts';
 
 export interface ToolContext {
   studio: Studio;
@@ -18,6 +19,8 @@ export interface ToolContext {
     /** the open home's folder; pictures and captures are relative to it */
     homeDir: string;
   };
+  /** the real home and its designs, and which is open */
+  versions?: Versions;
   /** the person's editor, when the studio has live clients */
   editor?: {
     /** is an editor open that can draw 3D pictures? */

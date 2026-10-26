@@ -49,7 +49,8 @@ The code must be good enough that strangers want to read and contribute to it.
   - `packages/three`: scene builder and our own GLB writer (element ids in extras; never the user's own models).
   - `packages/protocol`: live messages and `HomeMirror`.
   - `packages/capture`: `fullscale-capture/1` schemas and the scan importer (synthetic scans in tests).
-  - `apps/server`: the studio (one writer), WebSocket hub, HTTP, 42 MCP tools, stdio bridge (`fullscale mcp`), Blender render runner, CLI; the scans' photos for agents and real pictures cut from them (`photos.ts`, `tools/photos.ts`).
+  - `apps/server`: the studio (one writer), WebSocket hub, HTTP, 47 MCP tools, stdio bridge (`fullscale mcp`), Blender render runner, CLI; the scans' photos for agents and real pictures cut from them (`photos.ts`, `tools/photos.ts`).
+  - Designs (`apps/server/src/versions.ts`, `tools/designs.ts`): copies of the real home in the home's `designs/` folder; one is open in the studio at a time and edits go to it; the editor's top bar switches between them.
   - `packages/capture/src/extra-scan.ts`: another scan of a room, lined up with it (no new walls) and checked against the model.
   - `apps/editor`: Vite + React + R3F editor (plan tools, 3D view, inspector, issues), browser tests with Playwright.
   - `blender/`: add-on (link thread, protocol, change tracking, scene) and render script; pure parts tested.

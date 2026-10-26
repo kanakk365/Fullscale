@@ -2,7 +2,7 @@
 // left, the status bar at the bottom, and passing messages.
 import { CATALOG, type SnapMode } from '@fullscale/core';
 import { useEffect } from 'react';
-import { redo, undo } from '../app/actions.ts';
+import { newDesign, openVersion, redo, undo } from '../app/actions.ts';
 import { setState, useEditor, type EditorState, type ToolKind } from '../app/store.ts';
 
 export function TopBar() {
@@ -10,11 +10,29 @@ export function TopBar() {
   const level = useEditor((s) => s.level);
   const view = useEditor((s) => s.view);
   const undoState = useEditor((s) => s.undo);
+  const versions = useEditor((s) => s.versions);
   if (!home) return <header className="topbar" />;
   return (
     <header className="topbar">
       <span className="brand">Fullscale</span>
-      <span className="home-name">{home.name}</span>
+      {versions?.list.length ? (
+        <select
+          className="versions"
+          title="The real home, as scanned, and designs: copies to try changes on"
+          value={versions.open}
+          onChange={(e) => (e.target.value === '+new' ? newDesign() : openVersion(e.target.value))}
+        >
+          {versions.list.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.id === 'real' ? `${v.name} (real)` : `Design: ${v.name}`}
+            </option>
+          ))}
+          <option value="+new">+ New design…</option>
+        </select>
+      ) : (
+        <span className="home-name">{home.name}</span>
+      )}
+      {home.design && <span className="badge">Design</span>}
       {home.levels.length > 1 && (
         <select value={level ?? ''} onChange={(e) => setState({ level: e.target.value, selection: [] })}>
           {home.levels.map((l) => (

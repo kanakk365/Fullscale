@@ -10,6 +10,7 @@ import { parseClientMessage, PROTOCOL_VERSION, type ClientMessage, type Hello, t
 import { WebSocketServer, type WebSocket } from 'ws';
 import { sameToken } from './access.ts';
 import type { Studio, StudioEvent } from './studio.ts';
+import type { Versions } from './versions.ts';
 import { NAME, VERSION } from './version.ts';
 
 /** A client must say hello this soon after connecting. */
@@ -27,6 +28,8 @@ interface Client {
 
 export interface LiveOptions {
   studio: Studio;
+  /** the real home and its designs, for editors to switch between */
+  versions?: Versions;
   token: string;
   /** called for messages a client got wrong, for the server log */
   log?: (message: string) => void;
@@ -37,15 +40,24 @@ export class LiveHub {
   private readonly clients = new Set<Client>();
   private readonly renders = new Map<string, { resolve: (png: Buffer) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private readonly studio: Studio;
+  private readonly versions: Versions | undefined;
   private readonly token: string;
   private readonly log: (message: string) => void;
   private readonly unsubscribe: () => void;
 
   constructor(opts: LiveOptions) {
     this.studio = opts.studio;
+    this.versions = opts.versions;
     this.token = opts.token;
     this.log = opts.log ?? (() => undefined);
-    this.unsubscribe = this.studio.on((event) => this.broadcast(event));
+    const offStudio = this.studio.on((event) => this.broadcast(event));
+    const offVersions = this.versions?.on(() => {
+      for (const c of this.clients) if (c.hello.client === 'editor') this.sendVersions(c);
+    });
+    this.unsubscribe = () => {
+      offStudio();
+      offVersions?.();
+    };
   }
 
   /** Take over an HTTP upgrade request (the caller has already checked Host and Origin). */
@@ -167,6 +179,23 @@ export class LiveHub {
       case 'sync':
         send(client.socket, { type: 'snapshot', rev: this.studio.rev, home: this.studio.home, undo: this.undoState(client.actor) });
         return;
+      case 'versions':
+        this.sendVersions(client, message.req);
+        return;
+      case 'open_version':
+      case 'new_version': {
+        if (!this.versions) {
+          this.sendVersions(client, message.req, 'Designs are not available in this studio.');
+          return;
+        }
+        try {
+          if (message.type === 'open_version') this.versions.openVersion(message.id, this.studio);
+          else this.versions.openVersion(this.versions.create(this.studio, message.name).id, this.studio);
+        } catch (err) {
+          this.sendVersions(client, message.req, errorOf(err, this.log).message);
+        }
+        return;
+      }
       case 'render_reply': {
         const pending = this.renders.get(message.req);
         if (!pending) return;
@@ -198,6 +227,11 @@ export class LiveHub {
           break;
       }
     }
+  }
+
+  private sendVersions(client: Client, req?: string, error?: string): void {
+    const list = this.versions?.list() ?? [];
+    send(client.socket, { type: 'versions', ...(req ? { req } : {}), open: this.versions?.open ?? 'real', versions: list, ...(error ? { error } : {}) });
   }
 
   private undoState(actor: string) {

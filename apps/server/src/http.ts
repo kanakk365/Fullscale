@@ -20,11 +20,14 @@ import { LiveHub } from './live.ts';
 import { mcpHandler } from './mcp.ts';
 import { renderPlanPng } from './render-plan-png.ts';
 import type { Studio } from './studio.ts';
+import type { Versions } from './versions.ts';
 import type { ToolContext } from './tools/index.ts';
 import { NAME, VERSION } from './version.ts';
 
 export interface StudioServerOptions {
   studio: Studio;
+  /** the real home and its designs */
+  versions?: Versions;
   token: string;
   paths: ToolContext['paths'];
   /** 0 picks a free port */
@@ -62,9 +65,9 @@ const TYPES: Readonly<Record<string, string>> = {
 
 export function startStudioServer(opts: StudioServerOptions): Promise<StudioServer> {
   const log = opts.log ?? ((m: string) => console.error(m));
-  const live = new LiveHub({ studio: opts.studio, token: opts.token, log });
+  const live = new LiveHub({ studio: opts.studio, token: opts.token, log, ...(opts.versions ? { versions: opts.versions } : {}) });
   let port = opts.port;
-  const tools = mcpHandler({ studio: opts.studio, actor: 'agent', by: 'agent', paths: opts.paths, editor: live });
+  const tools = mcpHandler({ studio: opts.studio, actor: 'agent', by: 'agent', paths: opts.paths, editor: live, ...(opts.versions ? { versions: opts.versions } : {}) });
   const mcp = toNodeHandler(tools);
 
   const server: Server = createServer((req, res) => {

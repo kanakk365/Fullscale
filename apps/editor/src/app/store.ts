@@ -37,6 +37,8 @@ export interface EditorState {
   pending: number;
   /** the pointer on the plan, in metres */
   cursor: [number, number] | null;
+  /** the real home and its designs, and which is open (null until the studio says) */
+  versions: { open: string; list: Array<{ id: string; name: string; from?: string }> } | null;
 }
 
 const initial: EditorState = {
@@ -60,6 +62,7 @@ const initial: EditorState = {
   message: null,
   pending: 0,
   cursor: null,
+  versions: null,
 };
 
 type Listener = () => void;
